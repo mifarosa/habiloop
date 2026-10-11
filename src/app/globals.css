@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f7f6f3;
+  --card: #ffffff;
+  --text: #1c1b19;
+  --muted: #6b6860;
+  --border: #e5e2db;
+  --accent: #3b5bdb;
+  --green: #2f9e44;
+  --green-bg: #ebfbee;
+  --yellow: #c77700;
+  --yellow-bg: #fff4db;
+  --red: #e03131;
+  --red-bg: #fff0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413;
+    --card: #1f1e1c;
+    --text: #f1efe9;
+    --muted: #a19e95;
+    --border: #34322e;
+    --accent: #748ffc;
+    --green: #69db7c;
+    --green-bg: #17291b;
+    --yellow: #ffc94d;
+    --yellow-bg: #2e2513;
+    --red: #ff8787;
+    --red-bg: #321a1a;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-ok: var(--green);
+  --color-ok-bg: var(--green-bg);
+  --color-warn: var(--yellow);
+  --color-warn-bg: var(--yellow-bg);
+  --color-bad: var(--red);
+  --color-bad-bg: var(--red-bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-border bg-card px-3 py-2 text-text outline-none focus:border-accent;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium transition disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-accent text-white hover:opacity-90;
+}
+@utility btn-ghost {
+  @apply btn border border-border bg-card hover:bg-bg;
+}
