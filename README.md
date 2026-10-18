@@ -1,27 +1,32 @@
 # Habiloop
 
-A habit tracker PWA that is compatible with [Loop Habit Tracker](https://github.com/iSoron/uhabits) for Android.
-Runs fully in the browser (iPhone, desktop, Android), works offline, and stores everything on the device.
+Interval habit tracker (PWA). Instead of a daily streak, every habit has a window: choose **every how many days** and a **tolerance**, and the app works out the ideal day and the last day from when you last did it. When the day comes, it asks "did you do it?".
 
-- Opens a Loop backup (`.db`) directly, and exports back to the same format (Loop schema version 25).
-- Yes/No and numerical habits, any frequency ("X times per Y days"), archive.
-- Habit strength score ported from Loop's `Score.kt` / `ScoreList.kt`, plus a 90-day score chart and streaks.
-- Turkish and English.
+Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 
-Data is a real SQLite database (via [sql.js](https://github.com/sql-js/sql.js), vendored in `lib/`) kept in IndexedDB.
+| Day | State |
+| --- | --- |
+| Thursday, Friday | 🟢 Relaxed |
+| Saturday | 🟡 Ideal day |
+| Sunday | 🔴 Last day |
+| Monday | ⛔ Overdue |
+
+## Features
+- Habits sorted by urgency, with a one-tap **Done** button and **Another day** (pick any of the last 14 days).
+- "It's time" prompt once a day after the reminder time; optional browser notifications while the app is open or in the background.
+- On-time rate (share of cycles done by the last day) instead of a streak.
+- Interval suggestion after 5+ entries when your real rhythm differs.
+- Calendar with a log per day, history editing, JSON backup and restore.
+- Dozi-style UI: light/dark/system theme, accent colors, Turkish and English.
+- Data stays on the device (localStorage). Works offline, installable on Android and iOS.
 
 ## Run
+No build step. Serve the folder with any static server, for example `python -m http.server`, and open http://localhost:8000.
 
-Any static file server works, for example `python -m http.server`, then open http://localhost:8000.
-A service worker needs HTTPS (or localhost) to install the app.
-
-## Known limits
-
-- Reminders/notifications and widgets are not implemented yet.
-- Streaks are computed with a simplified rule, so a few numbers can differ from Loop for non-daily habits.
-- Loop's "skip" and "unknown" states are read, but the UI only toggles yes/no.
-- Backups written by this app have not been tested inside the Android app.
-
-## License
-
-GPL-3.0. The scoring code is derived from Loop Habit Tracker (GPL-3.0). Loop is not affiliated with this project.
+## Files
+| File | Purpose |
+| --- | --- |
+| `js/schedule.js` | Window, on-time rate and interval suggestion logic (pure functions) |
+| `js/app.js` | UI: habits, calendar, settings, prompts |
+| `js/i18n.js` | Turkish and English strings |
+| `sw.js` | Service worker (bump `CACHE` on every release) |

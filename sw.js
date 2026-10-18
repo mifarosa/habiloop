@@ -1,16 +1,14 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v6";
+const CACHE = "habiloop-v9";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/style.css",
-  "./js/lang.js",
-  "./js/score.js",
-  "./js/db.js",
-  "./lib/sql-wasm.js",
-  "./lib/sql-wasm.wasm",
+  "./js/theme-init.js",
+  "./js/i18n.js",
+  "./js/schedule.js",
   "./js/app.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

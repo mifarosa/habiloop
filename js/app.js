@@ -1,260 +1,259 @@
 (() => {
-  const LANG_KEY = "habiloop.lang", ARCH_KEY = "habiloop.showArchived";
-  const DAY = Score.DAY, VISIBLE_DAYS = 5;
-  const PALETTE = ["#D32F2F", "#E64A19", "#F57C00", "#FBC02D", "#AFB42B", "#7CB342", "#388E3C", "#00897B", "#0097A7", "#1976D2", "#303F9F", "#7B1FA2", "#C2185B", "#8D6E63", "#757575", "#455A64"];
-  const $ = (id) => document.getElementById(id);
-  const store = {
-    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
-  };
+  const KEY = "habiloop.v2";
+  const ACCENTS = ["teal", "blue", "purple", "rose", "orange"];
+  const ACCENT_COLORS = { teal: "#0f766e", blue: "#1d4ed8", purple: "#7c3aed", rose: "#be185d", orange: "#c2410c" };
+  const S = Schedule;
+  const $ = (s, r = document) => r.querySelector(s);
 
-  let lang = store.get(LANG_KEY) || ((navigator.language || "en").startsWith("tr") ? "tr" : "en");
-  let showArchived = store.get(ARCH_KEY) === "1";
-  let habits = [], entries = new Map();
-  let winOffset = 0, calMonth = null;
-  let editingId = null, detailId = null, pickedColor = 9;
+  let state = load();
+  let view = "habits";
+  let editingId = null, otherFor = null, askQueue = [], asking = null;
+  let calMonth = null, calSel = null;
 
-  const t = (k, vars = {}) => String(LANGS[lang][k] ?? LANGS.en[k] ?? k).replace(/\{(\w+)\}/g, (_, v) => vars[v]);
-  const colorOf = (h) => PALETTE[h.color >= 0 && h.color < PALETTE.length ? h.color : 9];
-  const todayNum = () => { const d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY); };
-  const dateOf = (n) => new Date(n * DAY); // UTC midnight: read with getUTC*
-  const entriesOf = (h) => entries.get(h.id) || new Map();
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.habits)) return { habits: s.habits, prefs: s.prefs || {} };
+    } catch (e) {}
+    return { habits: [], prefs: {} };
+  }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
 
-  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  const lang = () => state.prefs.lang || ((navigator.language || "tr").startsWith("tr") ? "tr" : "en");
+  const t = (k, v = {}) => String(I18N[lang()][k] ?? I18N.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x]);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const today = () => S.todayStr();
+  const fmt = (d) => new Date(S.num(d) * S.DAY).toLocaleDateString(lang(), { day: "numeric", month: "short", timeZone: "UTC" });
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+  const find = (id) => state.habits.find((h) => h.id === id);
+
   function toast(msg) {
-    const n = $("toast"); n.textContent = msg; n.hidden = false;
-    clearTimeout(toast.timer); toast.timer = setTimeout(() => (n.hidden = true), 2500);
+    const n = $("#toast"); n.textContent = msg; n.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(() => (n.hidden = true), 2200);
   }
 
-  function computed(h) {
-    const e = entriesOf(h), today = todayNum();
-    let first = today;
-    for (const d of e.keys()) if (d < first) first = d;
-    const s = Score.scores(h, e, first, today);
-    return { first, scores: s, score: s[s.length - 1] };
+  function applyPrefs() {
+    const r = document.documentElement, p = state.prefs;
+    p.theme === "light" || p.theme === "dark" ? r.setAttribute("data-theme", p.theme) : r.removeAttribute("data-theme");
+    r.setAttribute("data-accent", ACCENTS.includes(p.accent) ? p.accent : "teal");
+    r.lang = lang();
+    const meta = $('meta[name="theme-color"]'); if (meta) meta.content = ACCENT_COLORS[p.accent] || ACCENT_COLORS.teal;
   }
-
-  const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
-  const CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>';
-
-  function cellFor(h, day) {
-    const v = entriesOf(h).get(day);
-    const b = el("button", "cell");
-    b.style.color = "";
-    if (h.type === 1) {
-      if (v != null && v >= 0) {
-        const n = v / 1000;
-        b.textContent = n >= 1000 ? Math.round(n / 100) / 10 + "k" : String(Math.round(n * 10) / 10);
-        b.style.color = colorOf(h); b.style.fontWeight = "600";
-      } else b.textContent = "–";
-    } else if (v === Score.YES_MANUAL) { b.innerHTML = CHECK; b.style.color = colorOf(h); }
-    else if (v === Score.SKIP) b.textContent = "»";
-    else b.innerHTML = CROSS;
-    b.setAttribute("aria-label", `${h.name} ${dateOf(day).toISOString().slice(0, 10)}`);
-    b.onclick = () => toggle(h, day);
-    return b;
-  }
-
-  async function toggle(h, day) {
-    const v = entriesOf(h).get(day);
-    if (h.type === 1) {
-      const ans = prompt(t("enterValue", { day: dateOf(day).toISOString().slice(0, 10) }) + (h.unit ? ` (${h.unit})` : ""), v != null && v >= 0 ? v / 1000 : "");
-      if (ans === null) return;
-      const n = parseFloat(ans.replace(",", "."));
-      await LoopDB.setEntry(h.id, day, isFinite(n) && n >= 0 && ans.trim() !== "" ? Math.round(n * 1000) : null);
-    } else {
-      await LoopDB.setEntry(h.id, day, v === Score.YES_MANUAL ? null : Score.YES_MANUAL);
-    }
-    reload();
-  }
-
-  function reload() { habits = LoopDB.habits(); entries = LoopDB.entries(); render(); if (!$("detail").hidden) renderDetail(); }
-
-  function render() {
-    document.documentElement.lang = lang;
+  function translateStatic() {
     document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t(n.dataset.i18n)));
     document.querySelectorAll("[data-i18n-aria]").forEach((n) => n.setAttribute("aria-label", t(n.dataset.i18nAria)));
     document.querySelectorAll("[data-i18n-ph]").forEach((n) => n.setAttribute("placeholder", t(n.dataset.i18nPh)));
-    $("langBtn").textContent = t("langName");
-    $("archBtn").textContent = showArchived ? "✓ " + t("showArchived") : t("showArchived");
-
-    const today = todayNum() - winOffset;
-    const head = $("dayHead"); head.replaceChildren();
-    for (let i = VISIBLE_DAYS - 1; i >= 0; i--) {
-      const d = dateOf(today - i), s = el("span");
-      s.append(LANGS[lang].days[d.getUTCDay()], document.createElement("br"), String(d.getUTCDate()));
-      head.append(s);
-    }
-
-    const list = $("list"); list.replaceChildren();
-    const shown = habits.filter((h) => showArchived || !h.archived);
-    for (const h of shown) {
-      const li = el("li", "habit" + (h.archived ? " archived" : ""));
-      const row = el("div", "hrow");
-      const title = el("button", "title"); title.append(el("b", "", h.name));
-      title.firstChild.style.color = colorOf(h);
-      title.onclick = () => openDetail(h.id);
-      const pct = el("span", "pct", Math.floor(computed(h).score * 100) + "%");
-      const cells = el("div", "cells");
-      for (let i = VISIBLE_DAYS - 1; i >= 0; i--) cells.append(cellFor(h, today - i));
-      row.append(title, pct);
-      li.append(row, cells);
-      list.append(li);
-    }
-    const lo = dateOf(today - VISIBLE_DAYS + 1), hi = dateOf(today), mon = (d) => d.toLocaleDateString(lang, { month: "short", timeZone: "UTC" });
-    $("winLabel").textContent = `${lo.getUTCDate()} ${mon(lo)} – ${hi.getUTCDate()} ${mon(hi)} ${hi.getUTCFullYear()}`;
-    $("nextWin").disabled = winOffset === 0;
-    $("winNav").hidden = shown.length === 0;
-    $("empty").hidden = shown.length > 0;
-    $("dayHead").hidden = shown.length === 0;
   }
 
-  // ---- detail ----
-  function openDetail(id) { detailId = id; calMonth = null; $("detail").hidden = false; renderDetail(); }
-  function renderDetail() {
-    const h = habits.find((x) => x.id === detailId);
-    if (!h) { $("detail").hidden = true; return; }
-    $("dName").textContent = h.name; $("dName").style.color = colorOf(h);
-    $("dQuestion").textContent = h.question || ""; $("dQuestion").hidden = !h.question;
-    $("chartTitle").textContent = t("scoreChart");
-    $("dArch").textContent = t(h.archived ? "unarchive" : "archive");
+  // ---- habits view ----
+  function statusText(h, st) {
+    if (st.state === "ok") return st.toIdeal === 1 ? t("st.ok1") : t("st.ok", { n: st.toIdeal });
+    if (st.state === "ideal") return st.toIdeal === 0 ? t("st.ideal") : t("st.idealPast", { n: -st.toIdeal });
+    if (st.state === "last") return t("st.last");
+    return t("st.late", { n: -st.toDeadline });
+  }
+  const chipText = (st) => t("chip." + st.state);
 
-    const c = computed(h), today = todayNum(), e = entriesOf(h);
-    const at = (daysBack) => { const i = c.scores.length - 1 - daysBack; return i >= 0 ? c.scores[i] : 0; };
-    const st = Score.streaks(h, e, c.first, today);
-    let total = 0; for (const v of e.values()) total += h.type === 1 ? Math.max(0, v) / 1000 : v === Score.YES_MANUAL ? 1 : 0;
-    const diff = (d) => { const x = Math.round((c.score - at(d)) * 100); return (x > 0 ? "+" : "") + x + "%"; };
-    const stats = [[t("score"), Math.floor(c.score * 100) + "%"], [t("month"), diff(30)], [t("year"), diff(365)],
-      [t("total"), String(Math.round(total * 10) / 10)], [t("current"), String(st.current)], [t("best"), String(st.best)]];
-    $("stats").replaceChildren(...stats.map(([l, v]) => { const d = el("div", "stat"); d.append(el("b", "", v), el("span", "", l)); return d; }));
-    drawChart(c.scores.slice(-90), colorOf(h));
-    renderCal(h);
+  function habitCard(h) {
+    const st = S.status(h, today()), rate = S.onTime(h), sug = S.suggest(h);
+    const last = h.logs.length ? t("lastDone", { d: fmt(h.logs[h.logs.length - 1]) }) : t("never");
+    return `<article class="card habit ${st.state}">
+      <div class="top"><button class="name" data-act="edit" data-id="${h.id}">${esc(h.name)}</button><span class="chip">${chipText(st)}</span></div>
+      <div class="status">${statusText(h, st)}</div>
+      <div class="meta"><span>${h.grace ? t("ruleGrace", { n: h.every, g: h.grace }) : t("rule", { n: h.every })}${h.time ? " · " + h.time : ""}</span>
+        <span>${last}${rate ? " · " + t("rate", { p: Math.round(rate.rate * 100), a: rate.ok, b: rate.cycles }) : ""}</span></div>
+      <div class="row"><button class="btn primary" data-act="done" data-id="${h.id}">${t("done")}</button><button class="btn" data-act="other" data-id="${h.id}">${t("other")}</button></div>
+      ${sug ? `<div class="suggest"><span>${t("suggest", { n: sug })}</span><div class="row"><button class="btn primary" data-act="accept" data-id="${h.id}" data-n="${sug}">${t("change")}</button><button class="btn" data-act="dismiss" data-id="${h.id}" data-n="${sug}">${t("dismiss")}</button></div></div>` : ""}
+    </article>`;
   }
 
-  function renderCal(h) {
-    const now = dateOf(todayNum());
-    if (!calMonth) calMonth = { y: now.getUTCFullYear(), m: now.getUTCMonth() };
-    $("monLabel").textContent = new Date(Date.UTC(calMonth.y, calMonth.m, 1)).toLocaleDateString(lang, { month: "long", year: "numeric", timeZone: "UTC" });
-    $("nextMon").disabled = calMonth.y === now.getUTCFullYear() && calMonth.m === now.getUTCMonth();
-    const cal = $("cal"); cal.replaceChildren();
+  const order = { late: 0, last: 1, ideal: 2, ok: 3 };
+  function renderHabits() {
+    const list = state.habits.filter((h) => !h.archived)
+      .map((h) => ({ h, st: S.status(h, today()) }))
+      .sort((a, b) => order[a.st.state] - order[b.st.state] || a.st.ideal - b.st.ideal);
+    return (list.length
+      ? list.map((x) => habitCard(x.h)).join("") + `<p class="muted small">${t("legend")}</p>`
+      : `<div class="card empty"><h2>${t("empty.title")}</h2><p class="muted">${t("empty.text")}</p></div>`) + coffee();
+  }
+  const coffee = () => `<div class="coffee"><p>${t("coffee.text")}</p><a class="coffee-pill" href="https://buymeacoffee.com/mifarosa" target="_blank" rel="noopener noreferrer">☕ ${t("coffee.button")}</a></div>`;
+
+  // ---- calendar view ----
+  function renderCalendar() {
+    const now = new Date();
+    if (!calMonth) calMonth = { y: now.getFullYear(), m: now.getMonth() };
+    if (!calSel) calSel = today();
     const first = Date.UTC(calMonth.y, calMonth.m, 1), count = new Date(Date.UTC(calMonth.y, calMonth.m + 1, 0)).getUTCDate();
-    const lead = (new Date(first).getUTCDay() + 6) % 7; // Monday first
-    const names = LANGS[lang].days;
-    for (let i = 0; i < 7; i++) cal.append(el("span", "calh", names[(i + 1) % 7]));
-    for (let i = 0; i < lead; i++) cal.append(el("span"));
-    const e = entriesOf(h);
+    const lead = (new Date(first).getUTCDay() + 6) % 7;
+    const title = new Date(first).toLocaleDateString(lang(), { month: "long", year: "numeric", timeZone: "UTC" });
+    let cells = I18N[lang()].days.map((d) => `<span class="h">${d}</span>`).join("") + "<span></span>".repeat(lead);
     for (let d = 1; d <= count; d++) {
-      const day = Math.floor(first / DAY) + d - 1, v = e.get(day);
-      const done = h.type === 1 ? v != null && v >= 0 : v === Score.YES_MANUAL;
-      const b = el("button", "calday" + (done ? " on" : "") + (day === todayNum() ? " today" : ""), String(d));
-      if (done) b.style.background = colorOf(h);
-      if (day > todayNum()) b.disabled = true;
-      b.onclick = () => toggle(h, day);
-      cal.append(b);
+      const ds = S.str(Math.floor(first / S.DAY) + d - 1);
+      const n = state.habits.filter((h) => h.logs.includes(ds)).length;
+      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}" data-act="day" data-d="${ds}" ${ds > today() ? "disabled" : ""}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
     }
+    const done = state.habits.filter((h) => h.logs.includes(calSel));
+    const list = done.length
+      ? done.map((h) => `<div class="card row" style="align-items:center;justify-content:space-between"><span>${esc(h.name)}</span><button class="btn ghost danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")
+      : `<p class="muted">${t("cal.none")}</p>`;
+    return `<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${title}</strong><button data-act="nextm" aria-label="›">›</button></div>
+      <div class="cal">${cells}</div><h3 class="small muted" style="margin:14px 0 6px">${fmt(calSel)}</h3>${list}`;
   }
 
-  function drawChart(vals, color) {
-    const cv = $("chart"), dpr = window.devicePixelRatio || 1;
-    const w = cv.clientWidth || 300, h = 160;
-    cv.width = w * dpr; cv.height = h * dpr;
-    const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
-    const line = getComputedStyle(document.documentElement).getPropertyValue("--line") || "#ddd";
-    g.strokeStyle = line; g.lineWidth = 1;
-    for (const p of [0, 0.5, 1]) { const y = 8 + (1 - p) * (h - 16); g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-    if (vals.length < 2) return;
-    g.strokeStyle = color; g.lineWidth = 2.5; g.lineJoin = "round"; g.beginPath();
-    vals.forEach((v, i) => { const x = (i / (vals.length - 1)) * w, y = 8 + (1 - v) * (h - 16); i ? g.lineTo(x, y) : g.moveTo(x, y); });
-    g.stroke();
+  // ---- settings view ----
+  function renderSettings() {
+    const p = state.prefs, theme = p.theme || "system", accent = ACCENTS.includes(p.accent) ? p.accent : "teal";
+    const seg = (items, cur, act) => `<div class="seg">${items.map(([v, l]) => `<button class="btn${cur === v ? " on" : ""}" data-act="${act}" data-v="${v}">${l}</button>`).join("")}</div>`;
+    const perm = "Notification" in window ? Notification.permission : "denied";
+    const notif = !("Notification" in window) ? "" : perm === "granted" && p.notify ? `<button class="btn on" disabled>${t("set.notifOff")}</button>` : perm === "denied" ? `<button class="btn" disabled>${t("set.notifDenied")}</button>` : `<button class="btn" data-act="notify">${t("set.notifOn")}</button>`;
+    return `<section class="set"><h3>${t("set.theme")}</h3>${seg([["system", t("set.system")], ["light", t("set.light")], ["dark", t("set.dark")]], theme, "theme")}</section>
+      <section class="set"><h3>${t("set.accent")}</h3><div class="seg">${ACCENTS.map((a) => `<button class="dot-c${accent === a ? " on" : ""}" style="background:${ACCENT_COLORS[a]}" data-act="accent" data-v="${a}" aria-label="${a}"></button>`).join("")}</div></section>
+      <section class="set"><h3>${t("set.lang")}</h3>${seg([["tr", "Türkçe"], ["en", "English"]], lang(), "lang")}</section>
+      ${notif ? `<section class="set"><h3>${t("set.notif")}</h3><div class="seg">${notif}</div><p class="muted small">${t("set.notifNote")}</p></section>` : ""}
+      <section class="set"><h3>${t("set.data")}</h3><div class="seg"><button class="btn" data-act="export">${t("set.export")}</button><button class="btn" data-act="import">${t("set.import")}</button></div><p class="muted small">${t("set.privacy")}</p>
+      <input id="import-file" type="file" accept="application/json" hidden></section>${coffee()}`;
+  }
+
+  function render() {
+    applyPrefs(); translateStatic();
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+    $("#app").innerHTML = view === "habits" ? renderHabits() : view === "calendar" ? renderCalendar() : renderSettings();
+  }
+
+  // ---- logging ----
+  function logDone(h, date) {
+    S.addLog(h, date); h.askedOn = today(); save(); render(); toast(t("logged"));
+  }
+  function openOther(id, onPick) {
+    otherFor = { id, onPick };
+    const list = $("#other-list"); list.replaceChildren();
+    for (let i = 0; i < 14; i++) {
+      const d = S.str(S.num(today()) - i);
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn"; b.textContent = (i === 0 ? t("today") + " · " : i === 1 ? t("yesterday") + " · " : "") + fmt(d);
+      b.onclick = () => { $("#other-dialog").close(); logDone(find(id), d); if (otherFor.onPick) otherFor.onPick(); };
+      list.append(b);
+    }
+    $("#other-dialog").showModal();
   }
 
   // ---- editor ----
-  function buildColors() {
-    const box = $("colors"); box.replaceChildren();
-    PALETTE.forEach((c, i) => {
-      const b = el("button"); b.type = "button"; b.style.background = c; b.setAttribute("aria-label", c);
-      b.setAttribute("aria-pressed", String(i === pickedColor));
-      b.onclick = () => { pickedColor = i; buildColors(); };
-      box.append(b);
-    });
-  }
-  function syncType() { $("numFields").hidden = $("fType").value !== "1"; }
-  function openEditor(id) {
+  function openForm(id) {
     editingId = id || null;
-    const h = habits.find((x) => x.id === id);
-    $("editorTitle").textContent = t(h ? "editHabit" : "addHabit");
-    $("fName").value = h ? h.name : ""; $("fQuestion").value = h ? h.question || "" : "";
-    $("fType").value = String(h ? h.type || 0 : 0);
-    $("fNum").value = h ? h.freq_num || 1 : 1; $("fDen").value = h ? h.freq_den || 1 : 1;
-    $("fTargetType").value = String(h ? h.target_type || 0 : 0); $("fTarget").value = h ? h.target_value ?? 1 : 1;
-    $("fUnit").value = h ? h.unit || "" : "";
-    pickedColor = h && h.color >= 0 && h.color < PALETTE.length ? h.color : 9;
-    buildColors(); syncType();
-    $("delBtn").hidden = !h;
-    $("editor").hidden = false; $("fName").focus();
+    const h = find(id);
+    $("#form-title").textContent = t(h ? "editTitle" : "newTitle");
+    $("#f-name").value = h ? h.name : "";
+    $("#f-every").value = h ? h.every : 3;
+    $("#f-grace").value = h ? h.grace : 1;
+    $("#f-time").value = h ? h.time || "" : "09:00";
+    $("#f-last").value = ""; $("#f-last").max = today();
+    $("#f-last-wrap").hidden = !!h;
+    $("#f-history-wrap").hidden = !h;
+    $("#f-delete").hidden = !h;
+    const hist = $("#f-history"); hist.replaceChildren();
+    if (h) {
+      if (!h.logs.length) hist.textContent = t("noHistory");
+      [...h.logs].reverse().slice(0, 30).forEach((d) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "chip-btn"; b.textContent = fmt(d) + " ✕";
+        b.onclick = () => { h.logs = h.logs.filter((x) => x !== d); save(); b.remove(); render(); };
+        hist.append(b);
+      });
+    }
+    $("#form-dialog").showModal();
   }
-
-  $("fType").onchange = syncType;
-  $("form").onsubmit = async (e) => {
-    e.preventDefault();
-    const name = $("fName").value.trim(); if (!name) return;
-    const num = Math.max(1, parseInt($("fNum").value) || 1), den = Math.max(num > 1 ? 1 : 1, parseInt($("fDen").value) || 1);
-    await LoopDB.saveHabit({
-      id: editingId, name, question: $("fQuestion").value.trim(), type: parseInt($("fType").value),
-      freq_num: Math.min(num, den), freq_den: den, target_type: parseInt($("fTargetType").value),
-      target_value: parseFloat($("fTarget").value) || 0, unit: $("fUnit").value.trim(), color: pickedColor,
-    });
-    $("editor").hidden = true; reload();
+  $("#form").onsubmit = () => {
+    const name = $("#f-name").value.trim(); if (!name) return;
+    const data = {
+      name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: Math.max(0, parseInt($("#f-grace").value) || 0),
+      time: $("#f-time").value || null,
+    };
+    const h = find(editingId);
+    if (h) { if (data.every !== h.every) h.dismissed = null; Object.assign(h, data); }
+    else {
+      const nh = { id: uid(), created: today(), start: today(), logs: [], askedOn: null, archived: false, ...data };
+      const last = $("#f-last").value;
+      if (last && last <= today()) S.addLog(nh, last);
+      state.habits.push(nh);
+    }
+    save(); render();
   };
-  $("delBtn").onclick = async () => {
+  $("#f-delete").onclick = () => {
     if (!confirm(t("confirmDelete"))) return;
-    await LoopDB.deleteHabit(editingId);
-    $("editor").hidden = true; $("detail").hidden = true; reload();
+    state.habits = state.habits.filter((h) => h.id !== editingId);
+    save(); $("#form-dialog").close(); render();
   };
-  $("dEdit").onclick = () => { $("detail").hidden = true; openEditor(detailId); };
-  $("dArch").onclick = async () => {
-    const h = habits.find((x) => x.id === detailId);
-    await LoopDB.setArchived(h.id, !h.archived); $("detail").hidden = true; reload();
-  };
+  document.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
 
-  // ---- menu, import / export ----
-  $("prevWin").onclick = () => { winOffset += VISIBLE_DAYS; render(); };
-  $("nextWin").onclick = () => { winOffset = Math.max(0, winOffset - VISIBLE_DAYS); render(); };
-  $("prevMon").onclick = () => { calMonth = calMonth.m ? { y: calMonth.y, m: calMonth.m - 1 } : { y: calMonth.y - 1, m: 11 }; renderDetail(); };
-  $("nextMon").onclick = () => { calMonth = calMonth.m < 11 ? { y: calMonth.y, m: calMonth.m + 1 } : { y: calMonth.y + 1, m: 0 }; renderDetail(); };
-  $("addBtn").onclick = $("emptyAdd").onclick = () => openEditor();
-  $("menuBtn").onclick = () => ($("menu").hidden = false);
-  document.querySelectorAll("[data-close]").forEach((b) => (b.onclick = () => (b.closest(".sheet").hidden = true)));
-  document.querySelectorAll(".sheet").forEach((s) => s.addEventListener("click", (e) => { if (e.target === s) s.hidden = true; }));
-  $("langBtn").onclick = () => { lang = lang === "en" ? "tr" : "en"; store.set(LANG_KEY, lang); render(); if (!$("detail").hidden) renderDetail(); };
-  $("archBtn").onclick = () => { showArchived = !showArchived; store.set(ARCH_KEY, showArchived ? "1" : "0"); render(); };
+  // ---- "it's time" prompt ----
+  function pumpAsk() {
+    if (asking || $("dialog[open]")) return;
+    const now = new Date();
+    askQueue = state.habits.filter((h) => S.shouldAsk(h, now));
+    const h = askQueue[0]; if (!h) return;
+    asking = h;
+    $("#ask-title").textContent = h.name;
+    $("#ask-text").textContent = t("askText");
+    $("#ask-dialog").showModal();
+    if ("Notification" in window && Notification.permission === "granted" && state.prefs.notify && document.hidden) {
+      try { new Notification(h.name, { body: t("askText"), tag: h.id }); } catch (e) {}
+    }
+  }
+  const closeAsk = () => { asking = null; $("#ask-dialog").close(); setTimeout(pumpAsk, 300); };
+  $("#ask-done").onclick = () => { const h = asking; logDone(h, today()); closeAsk(); };
+  $("#ask-other").onclick = () => { const h = asking; $("#ask-dialog").close(); asking = null; h.askedOn = today(); save(); openOther(h.id); };
+  $("#ask-later").onclick = () => { asking.askedOn = today(); save(); closeAsk(); };
+  $("#ask-dialog").addEventListener("cancel", () => { if (asking) { asking.askedOn = today(); save(); asking = null; } });
 
-  $("importBtn").onclick = () => $("importFile").click();
-  $("importFile").onchange = async (e) => {
-    const f = e.target.files[0]; e.target.value = "";
-    if (!f) return;
+  // ---- clicks ----
+  $("#add").onclick = () => openForm();
+  document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => { view = b.dataset.view; render(); window.scrollTo(0, 0); }));
+  $("#app").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-act]"); if (!b) return;
+    const { act, id, v, d, n } = b.dataset, h = find(id);
+    if (act === "done") logDone(h, today());
+    else if (act === "other") openOther(id);
+    else if (act === "edit") openForm(id);
+    else if (act === "accept") { h.every = +n; h.dismissed = null; save(); render(); }
+    else if (act === "dismiss") { h.dismissed = +n; save(); render(); }
+    else if (act === "day") { calSel = d; render(); }
+    else if (act === "unlog") { h.logs = h.logs.filter((x) => x !== d); save(); render(); }
+    else if (act === "prevm") { calMonth = calMonth.m ? { y: calMonth.y, m: calMonth.m - 1 } : { y: calMonth.y - 1, m: 11 }; render(); }
+    else if (act === "nextm") { calMonth = calMonth.m < 11 ? { y: calMonth.y, m: calMonth.m + 1 } : { y: calMonth.y + 1, m: 0 }; render(); }
+    else if (act === "theme") { v === "system" ? delete state.prefs.theme : (state.prefs.theme = v); save(); render(); }
+    else if (act === "accent") { state.prefs.accent = v; save(); render(); }
+    else if (act === "lang") { state.prefs.lang = v; save(); render(); }
+    else if (act === "notify") {
+      const r = await Notification.requestPermission();
+      state.prefs.notify = r === "granted"; save(); render();
+    } else if (act === "export") {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+      a.download = `habiloop-${today()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } else if (act === "import") $("#import-file").click();
+  });
+  $("#app").addEventListener("change", async (e) => {
+    if (e.target.id !== "import-file") return;
+    const f = e.target.files[0]; if (!f) return;
     try {
-      await LoopDB.importBytes(new Uint8Array(await f.arrayBuffer()));
-      $("menu").hidden = true; reload(); toast(t("imported"));
-    } catch (err) { toast(t("importFail")); }
-  };
-  $("exportBtn").onclick = async () => {
-    const d = new Date(), pad = (n) => String(n).padStart(2, "0");
-    const name = `Loop Habits Backup ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.db`;
-    const file = new File([LoopDB.exportBytes()], name, { type: "application/octet-stream" });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
-    } catch (err) { if (err.name === "AbortError") return; }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(file); a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast(t("exported"));
-  };
+      const s = JSON.parse(await f.text());
+      if (!s || !Array.isArray(s.habits)) throw 0;
+      state = {
+        prefs: s.prefs && typeof s.prefs === "object" ? s.prefs : {},
+        habits: s.habits.filter((h) => h && typeof h.name === "string").map((h) => ({
+          id: String(h.id || uid()), name: h.name.slice(0, 60), every: Math.max(1, +h.every || 1), grace: Math.max(0, +h.grace || 0),
+          time: /^\d\d:\d\d$/.test(h.time) ? h.time : null, created: /^\d{4}-\d{2}-\d{2}$/.test(h.created) ? h.created : today(),
+          start: /^\d{4}-\d{2}-\d{2}$/.test(h.start) ? h.start : today(), askedOn: null, archived: !!h.archived, dismissed: h.dismissed ?? null,
+          logs: Array.isArray(h.logs) ? h.logs.filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort() : [],
+        })),
+      };
+      save(); render(); toast(t("set.importOk"));
+    } catch (err) { toast(t("set.importFail")); }
+  });
 
-  (async () => {
-    render();
-    try { await LoopDB.init(); } catch (e) { toast(t("loadFail")); return; }
-    reload();
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-  })();
+  render();
+  pumpAsk();
+  setInterval(pumpAsk, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); pumpAsk(); } });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
