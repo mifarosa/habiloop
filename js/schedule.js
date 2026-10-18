@@ -16,7 +16,9 @@
     let state = "ok";
     if (t > deadline) state = "late";
     else if (t >= ideal) state = h.grace > 0 && t === deadline ? "last" : "ideal";
-    return { ideal, deadline, state, toIdeal: ideal - t, toDeadline: deadline - t };
+    // frac: how far through the window we are, 0 at the last log, 1 on the final day.
+    const from = ideal - h.every, frac = Math.min(1, Math.max(0, (t - from) / (deadline - from)));
+    return { ideal, deadline, state, frac, toIdeal: ideal - t, toDeadline: deadline - t };
   }
 
   // Share of cycles done on or before the final day.

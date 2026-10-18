@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v9";
+const CACHE = "habiloop-v11";
 
 const ASSETS = [
   "./",
@@ -30,5 +30,22 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   event.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).catch(() => caches.match("./index.html")))
+  );
+});
+
+// Tapping a notification opens the app; its "Done" action logs today's entry (the app handles ?done=<id>).
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const id = event.notification.data && event.notification.data.id;
+  const done = event.action === "done" && id;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      const win = wins[0];
+      if (win) {
+        if (done) win.postMessage({ done: id });
+        return win.focus();
+      }
+      return self.clients.openWindow(done ? "./?done=" + encodeURIComponent(id) : "./");
+    })
   );
 });

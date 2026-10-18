@@ -17,7 +17,9 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 - On-time rate (share of cycles done by the last day) instead of a streak.
 - Interval suggestion after 5+ entries when your real rhythm differs.
 - Calendar with a log per day, history editing, JSON backup and restore.
-- Dozi-style UI: light/dark/system theme, accent colors, Turkish and English.
+- Paper-and-ink UI with progress rings: light/dark/system theme, five accent colors, Turkish and English.
+- Delete a habit from its detail sheet; "Delete all data" in settings.
+- Notifications: toggle, test notification and a "Done" action on the notification itself. They arrive while the app is open or in the background; a fully closed app cannot schedule them without a push server.
 - Data stays on the device (localStorage). Works offline, installable on Android and iOS.
 
 ## Run
