@@ -60,7 +60,10 @@ export function start(store) {
   const auth = getAuth(app);
   let db;
   try {
-    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      experimentalAutoDetectLongPolling: true, // falls back when a proxy or blocker cuts the streaming channel
+    });
   } catch (_) {
     db = getFirestore(app); // e.g. private browsing without IndexedDB: memory cache
   }
@@ -156,7 +159,7 @@ export function start(store) {
     try {
       meta = await getDoc(metaRef());
     } catch (err) {
-      return fail(err);
+      return fail(err, err && err.code === "permission-denied" ? "sync.rulesDenied" : "sync.unreachable");
     }
     const uid = user.uid;
     let result;
