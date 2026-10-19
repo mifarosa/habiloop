@@ -117,12 +117,12 @@
         <div class="srow"><span>${t("set.theme")}</span>${seg([["system", t("set.system")], ["light", t("set.light")], ["dark", t("set.dark")]], theme, "theme")}</div>
         <div class="srow"><span>${t("set.accent")}</span><div class="swatches">${Object.keys(ACCENTS).map((a) => `<button class="sw-${a}${accent === a ? " on" : ""}" data-act="accent" data-v="${a}" aria-label="${a}"></button>`).join("")}</div></div>
         <div class="srow"><span>${t("set.lang")}</span>${seg([["tr", "Türkçe"], ["en", "English"]], lang(), "lang")}</div></div></div>
-      <div class="group"><h3>${t("g.notif")}</h3><div class="list">${notif}</div><p class="hint" style="margin-top:8px">${t("set.notifNote")}</p></div>
+      <div class="group"><h3>${t("g.notif")}</h3><div class="list">${notif}</div><p class="hint gap">${t("set.notifNote")}</p></div>
       <div class="group"><h3>${t("g.data")}</h3><div class="list">
         <div class="srow"><span>${t("set.export")}</span><button class="linkbtn" data-act="export">›</button></div>
         <div class="srow"><span>${t("set.import")}</span><button class="linkbtn" data-act="import">›</button></div>
         <div class="srow"><span>${t("set.wipe")}</span><button class="linkbtn danger" data-act="wipe">›</button></div></div>
-        <p class="hint" style="margin-top:8px">${t("set.privacy")}</p><input id="import-file" type="file" accept="application/json" hidden></div>
+        <p class="hint gap">${t("set.privacy")}</p><input id="import-file" type="file" accept="application/json" hidden></div>
       <div class="group"><h3>${t("g.about")}</h3>${coffee()}</div>`;
   }
 
@@ -153,9 +153,22 @@
         <button class="btn quiet" data-act="edit" data-id="${h.id}">${t("edit")}</button><button class="btn quiet" data-close>${t("close")}</button></span></div></div>`;
   }
 
-  function removeHabit(id) {
+  // In-app confirmation (the browser's confirm() is blocked in some webviews and installed apps).
+  function confirmAction(text) {
+    return new Promise((resolve) => {
+      const d = $("#confirm-dialog");
+      $("#confirm-text").textContent = text;
+      const finish = (v) => { d.close(); resolve(v); };
+      $("#confirm-yes").onclick = () => finish(true);
+      $("#confirm-no").onclick = () => finish(false);
+      d.oncancel = () => resolve(false);
+      d.showModal();
+    });
+  }
+
+  async function removeHabit(id) {
     const h = find(id); if (!h) return;
-    if (!confirm(t("confirmDelete", { n: h.name }))) return;
+    if (!(await confirmAction(t("confirmDelete", { n: h.name })))) return;
     state.habits = state.habits.filter((x) => x.id !== id);
     save(); document.querySelectorAll("dialog[open]").forEach((d) => d.close()); render(); toast(t("deleted"));
   }
@@ -282,7 +295,7 @@
       a.download = `habiloop-${today()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } else if (act === "import") $("#import-file").click();
     else if (act === "wipe") {
-      if (!confirm(t("set.wipeConfirm"))) return;
+      if (!(await confirmAction(t("set.wipeConfirm")))) return;
       state.habits = []; save(); render(); toast(t("deleted"));
     }
   }
