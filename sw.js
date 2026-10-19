@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v18";
+const CACHE = "habiloop-v20";
 
 const ASSETS = [
   "./",
@@ -30,7 +30,8 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.includes("/__/")) return; // Firebase sign-in helpers go straight to the network
   event.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).catch(() => caches.match("./index.html")))
   );
