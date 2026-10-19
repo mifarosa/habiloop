@@ -447,6 +447,13 @@
   } catch (e) {}
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.done) markDoneFromNotification(e.data.done); });
+    // A new service worker takes over after an update: reload once so the new files show up right away.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded) return; // first install: nothing stale to replace
+      reloaded = true; location.reload();
+    });
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 
