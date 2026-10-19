@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v13";
+const CACHE = "habiloop-v14";
 
 const ASSETS = [
   "./",
@@ -10,6 +10,9 @@ const ASSETS = [
   "./js/i18n.js",
   "./js/schedule.js",
   "./js/app.js",
+  "./js/sync.js",
+  "./js/sync-core.js",
+  "./js/firebase-config.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://www.gstatic.com https://*.firebaseapp.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>Habiloop</title>
 <meta name="description" content="Aralıklı alışkanlık takibi: kaç günde bir yapacağını seç, günü gelince sana sorsun.">
 <meta name="theme-color" content="#f5efe3">
@@ -79,7 +79,24 @@
       <button type="button" id="confirm-yes" class="btn solid danger-solid" data-i18n="delete">Delete</button></div>
   </dialog>
 
+  <dialog id="pw-dialog">
+    <form id="pw-form">
+      <h2 id="pw-title"></h2>
+      <p id="pw-text" class="muted"></p>
+      <label><span data-i18n="pw.label">Password</span><input id="pw-1" type="password" autocomplete="off"></label>
+      <label id="pw-2-wrap"><span data-i18n="pw.confirm">Password (again)</span><input id="pw-2" type="password" autocomplete="off"></label>
+      <p id="pw-err" class="hint err"></p>
+      <div class="actions">
+        <button type="button" id="pw-forgot" class="linkbtn danger" data-i18n="pw.forgot">Forgot password</button>
+        <span class="grow"></span>
+        <button type="button" id="pw-cancel" class="btn quiet" data-i18n="cancel">Cancel</button>
+        <button type="submit" id="pw-ok" class="btn solid" data-i18n="pw.ok">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" role="status" hidden></div>
+  <script src="js/firebase-config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/schedule.js"></script>
   <script src="js/app.js"></script>

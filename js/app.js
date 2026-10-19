@@ -11,11 +11,41 @@
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && Array.isArray(s.habits)) return { habits: s.habits, prefs: s.prefs || {} };
+      if (s && Array.isArray(s.habits)) return { habits: s.habits, prefs: s.prefs || {}, tombstones: s.tombstones || {} };
     } catch (e) {}
-    return { habits: [], prefs: {} };
+    return { habits: [], prefs: {}, tombstones: {} };
   }
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // What sync compares: the habit's own fields (not the local "asked today" flags).
+  const pack = (h) => ({ name: h.name, every: h.every, grace: h.grace, time: h.time || null, start: h.start, created: h.created, logs: h.logs, archived: !!h.archived, dismissed: h.dismissed ?? null });
+  const sigs = {};
+  const syncListeners = [];
+  state.habits.forEach((h) => { if (!h.updatedAt) h.updatedAt = Date.now(); sigs[h.id] = JSON.stringify(pack(h)); });
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  // Stamps habits that changed since the last save, records deletions, and tells sync what to send.
+  function save() {
+    const now = Date.now(), changed = [];
+    for (const h of state.habits) {
+      const sig = JSON.stringify(pack(h));
+      if (sigs[h.id] !== sig) { sigs[h.id] = sig; h.updatedAt = now; delete state.tombstones[h.id]; changed.push(h.id); }
+    }
+    for (const id of Object.keys(sigs)) {
+      if (!state.habits.some((h) => h.id === id)) { delete sigs[id]; state.tombstones[id] = now; changed.push(id); }
+    }
+    persist();
+    if (changed.length) syncListeners.forEach((fn) => fn(changed));
+  }
+  const dateOk = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
+  function normalize(d, L) {
+    if (!d || typeof d.name !== "string") return null;
+    return {
+      id: String(d.id), updatedAt: d.updatedAt || Date.now(), name: d.name.slice(0, 60), every: Math.max(1, +d.every || 1), grace: Math.max(0, +d.grace || 0),
+      time: /^\d\d:\d\d$/.test(d.time) ? d.time : null, created: dateOk(d.created) ? d.created : Schedule.todayStr(), start: dateOk(d.start) ? d.start : Schedule.todayStr(),
+      archived: !!d.archived, dismissed: d.dismissed ?? null, logs: Array.isArray(d.logs) ? d.logs.filter(dateOk).sort() : [],
+      askedOn: L ? L.askedOn : null, notifiedOn: L ? L.notifiedOn : null,
+    };
+  }
 
   const lang = () => state.prefs.lang || ((navigator.language || "tr").startsWith("tr") ? "tr" : "en");
   const t = (k, v = {}) => String(I18N[lang()][k] ?? I18N.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x]);
@@ -117,6 +147,7 @@
         <div class="srow"><span>${t("set.theme")}</span>${seg([["system", t("set.system")], ["light", t("set.light")], ["dark", t("set.dark")]], theme, "theme")}</div>
         <div class="srow"><span>${t("set.accent")}</span><div class="swatches">${Object.keys(ACCENTS).map((a) => `<button class="sw-${a}${accent === a ? " on" : ""}" data-act="accent" data-v="${a}" aria-label="${a}"></button>`).join("")}</div></div>
         <div class="srow"><span>${t("set.lang")}</span>${seg([["tr", "Türkçe"], ["en", "English"]], lang(), "lang")}</div></div></div>
+      ${syncGroup()}
       <div class="group"><h3>${t("g.notif")}</h3><div class="list">${notif}</div><p class="hint gap">${t("set.notifNote")}</p></div>
       <div class="group"><h3>${t("g.data")}</h3><div class="list">
         <div class="srow"><span>${t("set.export")}</span><button class="linkbtn" data-act="export">›</button></div>
@@ -130,6 +161,7 @@
     applyPrefs(); translateStatic();
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
     $("#add").hidden = view !== "habits";
+    if (view === "settings" && syncConfigured() && !syncPromise) loadSync().catch(() => {}); // loaded early so the Google popup is not blocked
     $("#app").innerHTML = view === "habits" ? renderHabits() : view === "calendar" ? renderCalendar() : renderSettings();
     if ($("#detail-dialog").open) renderDetail();
   }
@@ -236,6 +268,75 @@
     }
   });
 
+  // ---- sync (optional; js/sync.js holds the Firebase logic and is loaded on demand) ----
+  const SYNC_KEY = "habiloop.sync";
+  let syncView = { state: "off" }, syncPromise = null;
+  const syncConfigured = () => !!(window.HABILOOP_FIREBASE && window.HABILOOP_FIREBASE.apiKey);
+  const syncEnabled = () => { try { return localStorage.getItem(SYNC_KEY) === "1"; } catch (e) { return false; } };
+  function setSyncEnabled(on) { try { on ? localStorage.setItem(SYNC_KEY, "1") : localStorage.removeItem(SYNC_KEY); } catch (e) {} }
+  function setSyncView(v) { syncView = v; if (view === "settings") render(); }
+
+  function askPassword({ mode, email, submit }) {
+    return new Promise((resolve) => {
+      const d = $("#pw-dialog"), create = mode === "create";
+      $("#pw-title").textContent = t(create ? "pw.createTitle" : "pw.unlockTitle");
+      $("#pw-text").textContent = t(create ? "pw.createText" : "pw.unlockText") + " (" + email + ")";
+      $("#pw-1").value = ""; $("#pw-2").value = ""; $("#pw-err").textContent = "";
+      $("#pw-2-wrap").hidden = !create; $("#pw-forgot").hidden = create;
+      const go = $("#pw-ok");
+      $("#pw-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const pw = $("#pw-1").value, err = $("#pw-err");
+        err.textContent = "";
+        if (pw.length < 8) { err.textContent = t("pw.short"); return; }
+        if (create && pw !== $("#pw-2").value) { err.textContent = t("pw.mismatch"); return; }
+        go.disabled = true;
+        try {
+          if (await submit(pw)) { d.close(); resolve("ok"); } else err.textContent = t("pw.wrong");
+        } catch (e2) { err.textContent = t("sync.error"); }
+        go.disabled = false;
+      };
+      $("#pw-forgot").onclick = () => { d.close(); resolve("forgot"); };
+      $("#pw-cancel").onclick = () => { d.close(); resolve("cancel"); };
+      d.oncancel = () => resolve("cancel");
+      d.showModal();
+      $("#pw-1").focus();
+    });
+  }
+
+  const syncStore = {
+    getHabits: () => state.habits, getTombstones: () => state.tombstones, normalize, pack,
+    applyRemote(habits, tombstones) {
+      state.habits = habits; state.tombstones = tombstones;
+      for (const k of Object.keys(sigs)) delete sigs[k];
+      habits.forEach((h) => (sigs[h.id] = JSON.stringify(pack(h))));
+      persist(); render();
+    },
+    onLocalChange: (fn) => syncListeners.push(fn),
+    setSyncView, setSyncEnabled, toast: (k) => toast(t(k)), confirm: (k) => confirmAction(t(k)), askPassword,
+  };
+  function loadSync() {
+    if (!syncPromise) {
+      syncPromise = import("./sync.js").then((m) => m.start(syncStore)).catch((e) => {
+        syncPromise = null; setSyncView({ state: "error", message: "sync.loadFailed" }); throw e;
+      });
+    }
+    return syncPromise;
+  }
+  const runSync = (method) => loadSync().then((c) => c[method]()).catch(() => {});
+
+  function syncGroup() {
+    if (!syncConfigured()) return "";
+    const v = syncView, btn = (act, label, cls = "") => `<button class="linkbtn ${cls}" data-act="${act}">${label}</button>`;
+    let text, actions = "";
+    if (v.state === "connecting") text = t("sync.connecting");
+    else if (v.state === "locked") { text = t("sync.lockedText", { e: v.email }); actions = btn("sync-unlock", t("sync.unlock")) + btn("sync-signout", t("sync.signout"), "danger"); }
+    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-signout", t("sync.signout"), "danger"); }
+    else if (v.state === "error") { text = t(v.message || "sync.error"); actions = btn("sync-retry", t("sync.retry")) + (v.email ? btn("sync-signout", t("sync.signout"), "danger") : ""); }
+    else { text = t("sync.offText"); actions = btn("sync-signin", t("sync.signin")); }
+    return `<div class="group"><h3>${t("g.account")}</h3><div class="list"><div class="srow"><span>${text}</span></div>${actions ? `<div class="srow">${actions}</div>` : ""}</div></div>`;
+  }
+
   // ---- notifications ----
   async function showNotification(title, body, id) {
     const opts = { body, tag: id || "habiloop", icon: "icons/icon-192.png", badge: "icons/icon-192.png", data: { id: id || null }, actions: id ? [{ action: "done", title: t("notif.done") }] : [] };
@@ -288,6 +389,10 @@
     else if (act === "theme") { v === "system" ? delete state.prefs.theme : (state.prefs.theme = v); save(); render(); }
     else if (act === "accent") { state.prefs.accent = v; save(); render(); }
     else if (act === "lang") { state.prefs.lang = v; save(); render(); }
+    else if (act === "sync-signin") runSync("signIn");
+    else if (act === "sync-unlock") runSync("unlock");
+    else if (act === "sync-signout") runSync("signOut");
+    else if (act === "sync-retry") runSync("retry");
     else if (act === "test") showNotification(t("test.title"), t("test.body"));
     else if (act === "export") {
       const a = document.createElement("a");
@@ -322,16 +427,10 @@
       try {
         const s = JSON.parse(await f.text());
         if (!s || !Array.isArray(s.habits)) throw 0;
-        const dateOk = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
-        state = {
-          prefs: s.prefs && typeof s.prefs === "object" ? s.prefs : {},
-          habits: s.habits.filter((h) => h && typeof h.name === "string").map((h) => ({
-            id: String(h.id || uid()), name: h.name.slice(0, 60), every: Math.max(1, +h.every || 1), grace: Math.max(0, +h.grace || 0),
-            time: /^\d\d:\d\d$/.test(h.time) ? h.time : null, created: dateOk(h.created) ? h.created : today(), start: dateOk(h.start) ? h.start : today(),
-            askedOn: null, notifiedOn: null, archived: !!h.archived, dismissed: h.dismissed ?? null,
-            logs: Array.isArray(h.logs) ? h.logs.filter(dateOk).sort() : [],
-          })),
-        };
+        const habits = s.habits.map((h) => normalize({ ...h, id: h.id || uid(), updatedAt: Date.now() })).filter(Boolean);
+        const prefs = s.prefs && typeof s.prefs === "object" ? s.prefs : {};
+        state.habits = []; save(); // tombstones for the old habits, so sync removes them too
+        state.prefs = prefs; state.habits = habits;
         save(); render(); toast(t("set.importOk"));
       } catch (err) { toast(t("set.importFail")); }
     }
@@ -352,6 +451,7 @@
   }
 
   render();
+  if (syncConfigured() && syncEnabled()) { setSyncView({ state: "connecting" }); loadSync().catch(() => {}); }
   pumpAsk();
   setInterval(pumpAsk, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); pumpAsk(); } });

@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Habiloop sync. Each signed-in user can only reach users/{their uid}; habits
+// are stored encrypted, so the server only ever sees ciphertext.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Key parameters: random salt, PBKDF2 iterations and an encrypted check value.
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['v', 'salt', 'iter', 'check'])
+        && request.resource.data.v is int
+        && request.resource.data.salt is string && request.resource.data.salt.size() <= 64
+        && request.resource.data.iter is int && request.resource.data.iter >= 100000
+        && request.resource.data.check is map
+        && request.resource.data.check.keys().hasOnly(['iv', 'ct']);
+
+      // One document per habit.
+      match /items/{itemId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && itemId.size() <= 64
+          && request.resource.data.keys().hasOnly(['iv', 'ct', 'updatedAt', 'deleted'])
+          && request.resource.data.iv is string && request.resource.data.iv.size() <= 32
+          && request.resource.data.ct is string && request.resource.data.ct.size() <= 40000
+          && request.resource.data.updatedAt is int
+          && request.resource.data.deleted is bool;
+      }
+    }
+  }
+}
