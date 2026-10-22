@@ -54,6 +54,23 @@
     return now.getHours() * 60 + now.getMinutes() >= hh * 60 + mm;
   }
 
-  const api = { DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk };
+  // The reminders the server should send for a habit: the ideal day, the last day (when there is
+  // a tolerance) and each of the next `lateDays` days after it. Each has a local day and a stage.
+  function reminders(h, lateDays = 7) {
+    if (h.archived) return [];
+    const st = status(h, "1970-01-01"); // only ideal/deadline are used, so the reference day is irrelevant
+    const out = [{ day: str(st.ideal), stage: st.deadline === st.ideal ? "last" : "ideal", late: 0 }];
+    if (st.deadline > st.ideal) out.push({ day: str(st.deadline), stage: "last", late: 0 });
+    for (let i = 1; i <= lateDays; i++) out.push({ day: str(st.deadline + i), stage: "late", late: i });
+    return out;
+  }
+
+  // Local wall-clock timestamp (ms) for a day and "HH:MM", in the device's own time zone.
+  function at(day, time) {
+    const [y, m, d] = day.split("-").map(Number), [hh, mm] = time.split(":").map(Number);
+    return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
+  }
+
+  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk };
   if (typeof module !== "undefined") module.exports = api; else root.Schedule = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

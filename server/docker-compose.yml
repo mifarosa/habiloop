@@ -1,0 +1,15 @@
+# From the repository root:  docker compose -f server/docker-compose.yml up -d --build
+# Put serviceAccount.json and .env in server/ first.
+services:
+  habiloop-notifier:
+    build: .
+    restart: always
+    env_file: .env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/serviceAccount.json
+      DATA_DIR: /data
+    volumes:
+      - ./serviceAccount.json:/run/secrets/serviceAccount.json:ro
+      - habiloop-data:/data
+volumes:
+  habiloop-data:

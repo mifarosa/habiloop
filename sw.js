@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v21";
+const CACHE = "habiloop-v23";
 
 const ASSETS = [
   "./",
@@ -13,6 +13,7 @@ const ASSETS = [
   "./js/sync.js",
   "./js/sync-core.js",
   "./js/firebase-config.js",
+  "./js/push-config.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
@@ -30,8 +31,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  const url = new URL(req.url);
-  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.includes("/__/")) return; // Firebase sign-in helpers go straight to the network
+  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   event.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).catch(() => caches.match("./index.html")))
   );
@@ -50,6 +50,22 @@ self.addEventListener("notificationclick", (event) => {
         return win.focus();
       }
       return self.clients.openWindow(done ? "./?done=" + encodeURIComponent(id) : "./");
+    })
+  );
+});
+
+// Server push (see server/): shows the reminder the home server sent, even when the app is closed.
+self.addEventListener("push", (event) => {
+  let d = {};
+  try { d = event.data.json(); } catch (e) {}
+  event.waitUntil(
+    self.registration.showNotification(d.title || "Habiloop", {
+      body: d.body || "",
+      tag: d.tag || "habiloop",
+      icon: "icons/icon-192.png",
+      badge: "icons/icon-192.png",
+      data: { id: d.id || null },
+      actions: d.id && d.act ? [{ action: "done", title: d.act }] : [],
     })
   );
 });

@@ -1,0 +1,17 @@
+# systemd unit. Edit User and the two paths, then:
+#   sudo cp habiloop-notifier.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now habiloop-notifier
+[Unit]
+Description=Habiloop reminder notifications
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/opt/habiloop/server
+ExecStart=/usr/bin/node --env-file=/opt/habiloop/server/.env src/index.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

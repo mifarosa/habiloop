@@ -5,14 +5,14 @@
 //   users/{uid}               { v, salt, iter, check }        key parameters
 //   users/{uid}/items/{id}    { iv, ct, updatedAt, deleted }  one per habit
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, writeBatch,
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+  initializeFirestore, getFirestore, persistentLocalCache,
+  collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, writeBatch,
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   PBKDF2_ITERATIONS, deriveKey, encryptJSON, decryptJSON, makeCheck, verifyCheck, randomBytes, toB64, fromB64, reconcile,
 } from "./sync-core.js";
@@ -20,6 +20,7 @@ import {
 // Public by design: access is controlled by sign-in and firestore.rules. Filled in js/firebase-config.js.
 const firebaseConfig = window.HABILOOP_FIREBASE;
 
+const SIGNIN_FLAG = "habiloop.signingIn"; // survives the redirect so the password prompt follows
 const PUSH_DELAY = 400;
 const BATCH_LIMIT = 400;
 
@@ -61,7 +62,7 @@ export function start(store) {
   let db;
   try {
     db = initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      localCache: persistentLocalCache(),
       experimentalAutoDetectLongPolling: true, // falls back when a proxy or blocker cuts the streaming channel
     });
   } catch (_) {
@@ -81,6 +82,19 @@ export function start(store) {
   const email = () => (user && user.email) || "";
   const itemsRef = () => collection(db, "users", user.uid, "items");
   const metaRef = () => doc(db, "users", user.uid);
+
+  // First read of the key document. Waits for the server's answer instead of failing straight away
+  // with "client is offline" while the connection is still being set up.
+  function readMeta(timeoutMs = 25000) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (fn, v) => { if (done) return; done = true; clearTimeout(timer); off(); fn(v); };
+      const timer = setTimeout(() => finish(reject, Object.assign(new Error("server unreachable"), { code: "unavailable" })), timeoutMs);
+      const off = onSnapshot(metaRef(), { includeMetadataChanges: true },
+        (snap) => { if (!snap.metadata.fromCache || snap.exists()) finish(resolve, snap); },
+        (err) => finish(reject, err));
+    });
+  }
 
   function stop() {
     unsubscribers.forEach((u) => u());
@@ -119,7 +133,9 @@ export function start(store) {
       begin();
     } else {
       store.setSyncView({ state: "locked", email: email() });
-      if (signingIn) {
+      let back = false;
+      try { back = sessionStorage.getItem(SIGNIN_FLAG) === "1"; sessionStorage.removeItem(SIGNIN_FLAG); } catch (_) {}
+      if (signingIn || back) {
         signingIn = false;
         unlock();
       }
@@ -138,9 +154,10 @@ export function start(store) {
       await signInWithPopup(auth, provider);
     } catch (err) {
       const code = err && err.code;
-      if (code === "auth/operation-not-supported-in-this-environment") {
-        // No popups at all (some in-app browsers): fall back to a redirect.
+      if (code === "auth/operation-not-supported-in-this-environment" || code === "auth/popup-blocked") {
+        // Installed apps and some browsers block popups: fall back to a full-page redirect.
         store.setSyncEnabled(true); // so the page loads sync again when it comes back
+        try { sessionStorage.setItem(SIGNIN_FLAG, "1"); } catch (_) {}
         await signInWithRedirect(auth, provider);
         return;
       }
@@ -157,7 +174,7 @@ export function start(store) {
     if (!user) return signIn();
     let meta;
     try {
-      meta = await getDoc(metaRef());
+      meta = await readMeta();
     } catch (err) {
       return fail(err, err && err.code === "permission-denied" ? "sync.rulesDenied" : "sync.unreachable");
     }
@@ -318,7 +335,71 @@ export function start(store) {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Server push (optional): this device's subscription plus the list of reminders to send,
+  // stored in pushSubs/{id}. The home server in server/ reads it. See server/README.md.
+  // -------------------------------------------------------------------------
+  const vapidKey = () => window.HABILOOP_VAPID || "";
+  const b64ToBytes = (b64) => {
+    const raw = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+  async function subDocId(endpoint) {
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+    return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const swReady = () => Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, rej) => setTimeout(() => rej(new Error("service worker not ready")), 6000)),
+  ]);
+  async function currentSub() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+    return (await swReady()).pushManager.getSubscription();
+  }
+  async function writeSub(sub, jobs) {
+    const j = sub.toJSON();
+    const id = await subDocId(j.endpoint);
+    await setDoc(doc(db, "pushSubs", id), {
+      uid: user.uid, endpoint: j.endpoint, keys: j.keys, lang: store.lang(),
+      jobs: jobs || [], ua: navigator.userAgent.slice(0, 160), updatedAt: Date.now(),
+    }, { merge: true });
+    return id;
+  }
+  const push = {
+    configured: () => !!vapidKey(),
+    supported: () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window,
+    async isOn() { try { return !!(user && (await currentSub())); } catch (_) { return false; } },
+    // Must run straight from a tap: browsers only show the permission prompt for a gesture.
+    async enable() {
+      if (!user) throw new Error("not signed in");
+      if ((await Notification.requestPermission()) !== "granted") return "denied";
+      const reg = await swReady();
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(vapidKey()) });
+      await writeSub(sub, store.pushJobs());
+      return "on";
+    },
+    async disable() {
+      const sub = await currentSub();
+      if (!sub) return;
+      const id = await subDocId(sub.endpoint);
+      await deleteDoc(doc(db, "pushSubs", id)).catch(() => {});
+      await sub.unsubscribe();
+    },
+    async publish(jobs) {
+      const sub = user && (await currentSub());
+      if (sub) await writeSub(sub, jobs);
+    },
+    async test() {
+      const sub = await currentSub();
+      if (!sub) throw new Error("not subscribed");
+      const id = await writeSub(sub, store.pushJobs()); // make sure the record exists before asking for a test
+      await updateDoc(doc(db, "pushSubs", id), { testAt: Date.now() });
+    },
+  };
+
   return {
+    push,
     signIn,
     unlock,
     signOut: doSignOut,

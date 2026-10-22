@@ -31,5 +31,14 @@ service cloud.firestore {
           && request.resource.data.deleted is bool;
       }
     }
+
+    // One record per device that wants server reminders: its push subscription and the list of
+    // reminders to send. The home server reads them with the Admin SDK (not subject to these rules).
+    match /pushSubs/{subId} {
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+    }
   }
 }

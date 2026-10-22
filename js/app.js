@@ -34,7 +34,7 @@
       if (!state.habits.some((h) => h.id === id)) { delete sigs[id]; state.tombstones[id] = now; changed.push(id); }
     }
     persist();
-    if (changed.length) syncListeners.forEach((fn) => fn(changed));
+    if (changed.length) { syncListeners.forEach((fn) => fn(changed)); publishPush(); }
   }
   const dateOk = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
   function normalize(d, L) {
@@ -143,12 +143,16 @@
         <div class="srow"><span>${t("set.defTime")}</span><input type="time" data-act="deftime" value="${defTime()}"></div>
         <div class="srow"><span>${t("set.test")}</span><button class="linkbtn" data-act="test" ${notifOn() ? "" : "disabled"}>›</button></div>`;
     }
+    const serverPush = window.HABILOOP_VAPID && syncView.state === "on" && "PushManager" in window
+      ? `<div class="srow"><span>${t("push.server")}<small>${t("push.serverSub")}</small></span>
+          <label class="sw"><input type="checkbox" data-act="pushserver" ${pushOn ? "checked" : ""}><i></i></label></div>
+        ${pushOn ? `<div class="srow"><span>${t("push.test")}</span><button class="linkbtn" data-act="pushtest">›</button></div>` : ""}` : "";
     return `<div class="group"><h3>${t("g.look")}</h3><div class="list">
         <div class="srow"><span>${t("set.theme")}</span>${seg([["system", t("set.system")], ["light", t("set.light")], ["dark", t("set.dark")]], theme, "theme")}</div>
         <div class="srow"><span>${t("set.accent")}</span><div class="swatches">${Object.keys(ACCENTS).map((a) => `<button class="sw-${a}${accent === a ? " on" : ""}" data-act="accent" data-v="${a}" aria-label="${a}"></button>`).join("")}</div></div>
         <div class="srow"><span>${t("set.lang")}</span>${seg([["tr", "Türkçe"], ["en", "English"]], lang(), "lang")}</div></div></div>
       ${syncGroup()}
-      <div class="group"><h3>${t("g.notif")}</h3><div class="list">${notif}</div><p class="hint gap">${t("set.notifNote")}</p></div>
+      <div class="group"><h3>${t("g.notif")}</h3><div class="list">${serverPush}${notif}</div><p class="hint gap">${t("set.notifNote")}</p></div>
       <div class="group"><h3>${t("g.data")}</h3><div class="list">
         <div class="srow"><span>${t("set.export")}</span><button class="linkbtn" data-act="export">›</button></div>
         <div class="srow"><span>${t("set.import")}</span><button class="linkbtn" data-act="import">›</button></div>
@@ -268,13 +272,43 @@
     }
   });
 
+  // ---- server push: the list of reminders this device hands to the home server ----
+  let pushOn = false, pushTimer = null;
+  const pushJobsFor = (h) => {
+    const time = h.time || defTime(), now = Date.now(), jobs = [];
+    for (const r of S.reminders(h)) {
+      const when = S.at(r.day, time);
+      if (when < now - 45 * 60000) continue; // the server drops anything later than that anyway
+      jobs.push({
+        key: `${h.id}|${r.day}|${r.stage}`, at: when, id: h.id, name: h.name, tag: "habiloop-" + h.id, act: t("notif.done"),
+        title: h.name, body: r.stage === "late" ? t("st.late", { n: r.late }) : t(r.stage === "last" ? "st.last" : "st.ideal"),
+      });
+    }
+    return jobs;
+  };
+  function buildJobs() {
+    return state.habits.flatMap(pushJobsFor).sort((x, y) => x.at - y.at).slice(0, 80);
+  }
+  // Called after any change (and when the app is opened): keeps the server's list current.
+  function publishPush() {
+    if (!pushOn) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { loadSync().then((c) => c.push.publish(buildJobs())).catch(() => {}); }, 800);
+  }
+
   // ---- sync (optional; js/sync.js holds the Firebase logic and is loaded on demand) ----
   const SYNC_KEY = "habiloop.sync";
   let syncView = { state: "off" }, syncPromise = null;
   const syncConfigured = () => !!(window.HABILOOP_FIREBASE && window.HABILOOP_FIREBASE.apiKey);
   const syncEnabled = () => { try { return localStorage.getItem(SYNC_KEY) === "1"; } catch (e) { return false; } };
   function setSyncEnabled(on) { try { on ? localStorage.setItem(SYNC_KEY, "1") : localStorage.removeItem(SYNC_KEY); } catch (e) {} }
-  function setSyncView(v) { syncView = v; if (view === "settings") render(); }
+  function setSyncView(v) {
+    syncView = v;
+    if (v.state === "on" && syncPromise) {
+      syncPromise.then((c) => c.push.isOn()).then((on) => { pushOn = on; if (on) publishPush(); if (view === "settings") render(); }).catch(() => {});
+    } else if (v.state !== "on") pushOn = false;
+    if (view === "settings") render();
+  }
 
   function askPassword({ mode, email, submit }) {
     return new Promise((resolve) => {
@@ -313,7 +347,7 @@
       persist(); render();
     },
     onLocalChange: (fn) => syncListeners.push(fn),
-    setSyncView, setSyncEnabled, toast: (k) => toast(t(k)), confirm: (k) => confirmAction(t(k)), askPassword,
+    lang, pushJobs: () => buildJobs(), setSyncView, setSyncEnabled, toast: (k) => toast(t(k)), confirm: (k) => confirmAction(t(k)), askPassword,
   };
   function loadSync() {
     if (!syncPromise) {
@@ -351,6 +385,7 @@
   // ---- "it's time" prompt ----
   function pumpAsk() {
     const now = new Date();
+    if (pushOn) return; // the home server sends the reminders
     if (notifOn() && document.hidden) {
       state.habits.filter((h) => S.shouldAsk({ ...h, askedOn: h.notifiedOn }, now)).forEach((h) => {
         h.notifiedOn = today(); save(); showNotification(h.name, t("askText"), h.id);
@@ -389,6 +424,9 @@
     else if (act === "theme") { v === "system" ? delete state.prefs.theme : (state.prefs.theme = v); save(); render(); }
     else if (act === "accent") { state.prefs.accent = v; save(); render(); }
     else if (act === "lang") { state.prefs.lang = v; save(); render(); }
+    else if (act === "pushtest") {
+      try { await (await loadSync()).push.test(); toast(t("push.testSent")); } catch (e) { toast(t("push.err")); }
+    }
     else if (act === "sync-signin") runSync("signIn");
     else if (act === "sync-unlock") runSync("unlock");
     else if (act === "sync-signout") runSync("signOut");
@@ -415,7 +453,17 @@
   });
   document.addEventListener("change", async (e) => {
     const el = e.target, act = el.dataset && el.dataset.act;
-    if (act === "notify") {
+    if (act === "pushserver") {
+      try {
+        const c = await loadSync();
+        if (el.checked) {
+          const r = await c.push.enable();
+          pushOn = r === "on";
+          if (r === "denied") toast(t("push.denied"));
+        } else { await c.push.disable(); pushOn = false; }
+      } catch (e) { console.error(e); pushOn = false; toast(t("push.err")); }
+      render();
+    } else if (act === "notify") {
       if (el.checked) {
         const r = await Notification.requestPermission();
         state.prefs.notify = r === "granted";
@@ -461,5 +509,5 @@
   if (syncConfigured() && syncEnabled()) { setSyncView({ state: "connecting" }); loadSync().catch(() => {}); }
   pumpAsk();
   setInterval(pumpAsk, 60000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); pumpAsk(); } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); pumpAsk(); publishPush(); } });
 })();
