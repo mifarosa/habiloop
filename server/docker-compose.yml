@@ -1,5 +1,7 @@
 # From the repository root:  docker compose -f server/docker-compose.yml up -d --build
 # Put serviceAccount.json and .env in server/ first.
+# Own project name, so it never mixes with other compose projects that also live in a folder called "server".
+name: habiloop
 services:
   habiloop-notifier:
     build: .
