@@ -212,7 +212,8 @@ export function start(store) {
       store.toast("sync.started");
       begin();
     } else if (result === "forgot") {
-      if (!(await store.confirm("pw.resetConfirm"))) return unlock();
+      // On a device with no habits nothing gets re-uploaded, so the warning is much stronger.
+      if (!(await store.confirm(store.getHabits().length ? "pw.resetConfirm" : "pw.resetConfirmEmpty"))) return unlock();
       try {
         await wipeCloud();
       } catch (err) {
