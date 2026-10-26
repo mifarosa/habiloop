@@ -51,11 +51,19 @@ $NodeExe = (Get-Command node).Source
 
 # ------------------------------------------------------------- 2) Bagimliliklar
 Say "2/6 Bagimliliklar"
+$NpmLog = Join-Path $env:TEMP "habiloop-npm.log"
 Push-Location $Server
 try {
-  & npm install --omit=dev --no-audit --no-fund 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { Die "npm install basarisiz. Internet baglantini kontrol et." }
+  # cmd /c keeps npm's warnings (written to stderr) from being treated as errors by Windows PowerShell.
+  cmd /c "npm install --omit=dev --no-audit --no-fund > `"$NpmLog`" 2>&1"
+  $npmCode = $LASTEXITCODE
 } finally { Pop-Location }
+if ($npmCode -ne 0) {
+  Write-Host "`n--- npm ciktisinin sonu ($NpmLog) ---"
+  if (Test-Path $NpmLog) { Get-Content $NpmLog -Tail 15 }
+  Write-Host "------------------------------------"
+  Die "npm install basarisiz (kod $npmCode). Yukaridaki ciktiya bak; baglanti, antivirus ya da yol sorunu olabilir."
+}
 Ok "kuruldu"
 
 # ------------------------------------------------------ 3) Firebase servis hesabi
