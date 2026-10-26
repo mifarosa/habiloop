@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v24";
+const CACHE = "habiloop-v25";
 
 const ASSETS = [
   "./",
