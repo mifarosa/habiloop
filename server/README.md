@@ -18,7 +18,34 @@ Telefon (Habiloop) ──abonelik + bildirim listesi──▶ Firestore ◀─�
 - Sunucu kapalıyken ya da servis durmuşken bildirim gelmez. Servis tekrar açılınca yalnızca son 30 dakikadakileri
   gönderir, eskileri yağdırmaz.
 
-## Hızlı kurulum (önerilen)
+## Windows'ta kurulum
+
+Bilgisayar açık ve oturum açıkken bildirimler gelir (uyku modunda gelmez). Her zaman açık kalacak bir PC ya da mini PC için uygundur.
+
+1. Firebase konsolunda yukarıdaki 1. adımı yap (Firestore kuralları ve servis hesabı anahtarı). İndirilen `.json` dosyasının yolunu not et.
+2. Depoyu indir (`git clone https://github.com/mifarosa/habiloop` ya da GitHub'dan ZIP) ve PowerShell'i o klasörde aç:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File server\install.ps1
+```
+
+Betik Node.js'i kontrol eder (yoksa `winget` ile kurar), bağımlılıkları kurar, anahtarı sorar (JSON dosyasını pencereye sürükleyip bırakabilirsin),
+bildirim anahtarlarını üretir, Firestore'a bağlanıp denemesini yapar ve sunucuyu **Görev Zamanlayıcı**'ya `HabiloopNotifier` adıyla ekler.
+Windows'a her giriş yaptığında gizli başlar. Günlük `server\data
+otifier.log` dosyasındadır:
+
+```powershell
+Get-Content server\data
+otifier.log -Wait -Tail 20
+```
+
+Durdurmak için `Stop-ScheduledTask -TaskName HabiloopNotifier`, kaldırmak için
+`Unregister-ScheduledTask -TaskName HabiloopNotifier -Confirm:$false`.
+
+Betik yeni bir **PUBLIC anahtar** üretirse ekrana yazar. Uygulamadaki `js/push-config.js` bu anahtarla aynı olmalı, yoksa
+bildirim gelmez. Anahtarı bana gönder ya da dosyaya kendin yaz.
+
+## Linux'ta hızlı kurulum (önerilen)
 
 Cihaz Raspberry Pi OS, Debian ya da Ubuntu olmalı.
 
