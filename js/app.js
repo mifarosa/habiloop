@@ -296,6 +296,17 @@
     pushTimer = setTimeout(() => { loadSync().then((c) => c.push.publish(buildJobs())).catch(() => {}); }, 800);
   }
 
+  // A readable reason for a failed push action; the raw error stays in the console.
+  function pushErrText(e) {
+    const code = String((e && (e.code || e.name)) || ""), msg = String((e && e.message) || "");
+    if (code.includes("permission-denied")) return t("push.errRules");
+    if (code === "NotAllowedError") return t("push.denied");
+    if (msg.includes("service worker")) return t("push.errSw");
+    if (code === "AbortError" || /push service|registration failed/i.test(msg)) return t("push.errService");
+    if (code.includes("unavailable") || !navigator.onLine) return t("sync.unreachable");
+    return t("push.err") + " (" + (code || msg).slice(0, 60) + ")";
+  }
+
   // ---- sync (optional; js/sync.js holds the Firebase logic and is loaded on demand) ----
   const SYNC_KEY = "habiloop.sync";
   let syncView = { state: "off" }, syncPromise = null;
@@ -425,7 +436,7 @@
     else if (act === "accent") { state.prefs.accent = v; save(); render(); }
     else if (act === "lang") { state.prefs.lang = v; save(); render(); }
     else if (act === "pushtest") {
-      try { await (await loadSync()).push.test(); toast(t("push.testSent")); } catch (e) { toast(t("push.err")); }
+      try { await (await loadSync()).push.test(); toast(t("push.testSent")); } catch (e) { console.error(e); toast(pushErrText(e)); }
     }
     else if (act === "sync-signin") runSync("signIn");
     else if (act === "sync-unlock") runSync("unlock");
@@ -461,7 +472,7 @@
           pushOn = r === "on";
           if (r === "denied") toast(t("push.denied"));
         } else { await c.push.disable(); pushOn = false; }
-      } catch (e) { console.error(e); pushOn = false; toast(t("push.err")); }
+      } catch (e) { console.error(e); pushOn = false; toast(pushErrText(e)); }
       render();
     } else if (act === "notify") {
       if (el.checked) {
