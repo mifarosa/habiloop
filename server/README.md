@@ -31,12 +31,10 @@ powershell -ExecutionPolicy Bypass -File server\install.ps1
 
 Betik Node.js'i kontrol eder (yoksa `winget` ile kurar), bağımlılıkları kurar, anahtarı sorar (JSON dosyasını pencereye sürükleyip bırakabilirsin),
 bildirim anahtarlarını üretir, Firestore'a bağlanıp denemesini yapar ve sunucuyu **Görev Zamanlayıcı**'ya `HabiloopNotifier` adıyla ekler.
-Windows'a her giriş yaptığında gizli başlar. Günlük `server\data
-otifier.log` dosyasındadır:
+Windows'a her giriş yaptığında gizli başlar. Günlük `server\data\notifier.log` dosyasındadır:
 
 ```powershell
-Get-Content server\data
-otifier.log -Wait -Tail 20
+Get-Content server\data\notifier.log -Wait -Tail 20
 ```
 
 Durdurmak için `Stop-ScheduledTask -TaskName HabiloopNotifier`, kaldırmak için
