@@ -51,7 +51,8 @@ export function createNotifier({
         subs.delete(sub.id);
         await removeSub(sub.id).catch(() => {});
       } else {
-        log(`push to ${sub.id.slice(0, 8)}… failed: ${err && (err.statusCode || err.message)}`);
+        const body = err && err.body ? ` ${String(err.body).replace(/\s+/g, ' ').slice(0, 200)}` : '';
+        log(`push to ${sub.id.slice(0, 8)}… failed: ${err && (err.statusCode || err.message)}${body}`);
       }
       return false;
     }

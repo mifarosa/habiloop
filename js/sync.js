@@ -356,6 +356,26 @@ export function start(store) {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
     return (await swReady()).pushManager.getSubscription();
   }
+  // A subscription made for another server key can never receive our pushes (the push service answers 400).
+  function usesOurKey(sub) {
+    const k = sub.options && sub.options.applicationServerKey;
+    if (!k) return true; // cannot tell; keep it
+    const ours = b64ToBytes(vapidKey()), theirs = new Uint8Array(k);
+    return ours.length === theirs.length && ours.every((b, i) => b === theirs[i]);
+  }
+  // The device's subscription for the current key: replaces one made for an older key.
+  async function ensureSub(create) {
+    const reg = await swReady();
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !usesOurKey(sub)) {
+      const id = await subDocId(sub.endpoint);
+      await deleteDoc(doc(db, "pushSubs", id)).catch(() => {});
+      await sub.unsubscribe();
+      sub = null;
+    }
+    if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(vapidKey()) });
+    return sub;
+  }
   async function writeSub(sub, jobs) {
     const j = sub.toJSON();
     const id = await subDocId(j.endpoint);
@@ -373,9 +393,7 @@ export function start(store) {
     async enable() {
       if (!user) throw new Error("not signed in");
       if ((await Notification.requestPermission()) !== "granted") return "denied";
-      const reg = await swReady();
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(vapidKey()) });
+      const sub = await ensureSub(true);
       await writeSub(sub, store.pushJobs());
       return "on";
     },
@@ -387,11 +405,13 @@ export function start(store) {
       await sub.unsubscribe();
     },
     async publish(jobs) {
-      const sub = user && (await currentSub());
+      if (!user) return;
+      // Permission was already granted, so an outdated subscription can be renewed without a prompt.
+      const sub = await ensureSub(Notification.permission === "granted");
       if (sub) await writeSub(sub, jobs);
     },
     async test() {
-      const sub = await currentSub();
+      const sub = await ensureSub(Notification.permission === "granted");
       if (!sub) throw new Error("not subscribed");
       const id = await writeSub(sub, store.pushJobs()); // make sure the record exists before asking for a test
       await updateDoc(doc(db, "pushSubs", id), { testAt: Date.now() });
