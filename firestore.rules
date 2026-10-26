@@ -8,16 +8,19 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
-    // Key parameters: random salt, PBKDF2 iterations and an encrypted check value.
+    // The data key, locked by the password (PBKDF2). Older accounts only have v, salt, iter, check.
     match /users/{uid} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['v', 'salt', 'iter', 'check'])
+        && request.resource.data.keys().hasOnly(['v', 'kid', 'salt', 'iter', 'check', 'wrapped'])
         && request.resource.data.v is int
         && request.resource.data.salt is string && request.resource.data.salt.size() <= 64
         && request.resource.data.iter is int && request.resource.data.iter >= 100000
         && request.resource.data.check is map
-        && request.resource.data.check.keys().hasOnly(['iv', 'ct']);
+        && request.resource.data.check.keys().hasOnly(['iv', 'ct'])
+        && (!('kid' in request.resource.data) || (request.resource.data.kid is string && request.resource.data.kid.size() <= 32))
+        && (!('wrapped' in request.resource.data) || (request.resource.data.wrapped is map
+            && request.resource.data.wrapped.keys().hasOnly(['iv', 'ct'])));
 
       // One document per habit.
       match /items/{itemId} {

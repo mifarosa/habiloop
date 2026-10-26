@@ -323,9 +323,9 @@
 
   function askPassword({ mode, email, submit }) {
     return new Promise((resolve) => {
-      const d = $("#pw-dialog"), create = mode === "create";
-      $("#pw-title").textContent = t(create ? "pw.createTitle" : "pw.unlockTitle");
-      $("#pw-text").textContent = t(create ? "pw.createText" : "pw.unlockText") + " (" + email + ")";
+      const d = $("#pw-dialog"), create = mode !== "unlock"; // "create" and "change" ask for the password twice
+      $("#pw-title").textContent = t(mode === "change" ? "pw.changeTitle" : create ? "pw.createTitle" : "pw.unlockTitle");
+      $("#pw-text").textContent = t(mode === "change" ? "pw.changeText" : create ? "pw.createText" : "pw.unlockText") + " (" + email + ")";
       $("#pw-1").value = ""; $("#pw-2").value = ""; $("#pw-err").textContent = "";
       $("#pw-2-wrap").hidden = !create; $("#pw-forgot").hidden = create;
       const go = $("#pw-ok");
@@ -376,7 +376,7 @@
     let text, actions = "";
     if (v.state === "connecting") text = t("sync.connecting");
     else if (v.state === "locked") { text = t("sync.lockedText", { e: v.email }); actions = btn("sync-unlock", t("sync.unlock")) + btn("sync-signout", t("sync.signout"), "danger"); }
-    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-signout", t("sync.signout"), "danger"); }
+    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-changepw", t("sync.changePw")) + btn("sync-signout", t("sync.signout"), "danger"); }
     else if (v.state === "error") { text = t(v.message || "sync.error"); actions = btn("sync-retry", t("sync.retry")) + (v.email ? btn("sync-signout", t("sync.signout"), "danger") : ""); }
     else { text = t("sync.offText"); actions = btn("sync-signin", t("sync.signin")); }
     return `<div class="group"><h3>${t("g.account")}</h3><div class="list"><div class="srow"><span>${text}</span></div>${actions ? `<div class="srow">${actions}</div>` : ""}</div></div>`;
@@ -441,6 +441,7 @@
     else if (act === "sync-signin") runSync("signIn");
     else if (act === "sync-unlock") runSync("unlock");
     else if (act === "sync-signout") runSync("signOut");
+    else if (act === "sync-changepw") runSync("changePassword");
     else if (act === "sync-retry") runSync("retry");
     else if (act === "test") showNotification(t("test.title"), t("test.body"));
     else if (act === "export") {

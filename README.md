@@ -35,7 +35,9 @@ Sync is off until a Firebase project is configured; with an empty `js/firebase-c
 4. **Firestore Database**: create it, then paste `firestore.rules` into **Rules** and publish.
 5. Put the web app's config values into `js/firebase-config.js`. They are public by design; access is enforced by sign-in and the rules.
 
-Habits are merged one by one (the newer edit wins) and deletions travel as tombstones. A forgotten sync password wipes the cloud copy and re-uploads from a device that still has the habits.
+Habits are merged one by one (the newer edit wins) and deletions travel as tombstones.
+
+The habits are encrypted with a random data key; the sync password only locks that key. **Settings > Change password** re-locks the same key with a new password: no habit is re-encrypted or deleted, and devices that are already signed in keep working. Only "Forgot password" (no signed-in device left) wipes the cloud copy and re-uploads from a device that still has the habits.
 
 ## Server notifications (optional)
 A small Node service in `server/` runs on an always-on machine and sends the reminders as Web Push. Habit data stays

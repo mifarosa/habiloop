@@ -36,9 +36,10 @@ const I18N = {
     "push.testSent": "Test isteği gönderildi, birkaç saniye içinde gelmeli", "push.denied": "Bildirim izni verilmedi", "push.err": "Bildirim ayarı yapılamadı, tekrar dene",
     "push.errRules": "Firestore kuralları yayınlanmamış. Firebase > Firestore > Rules bölümüne firestore.rules içeriğini yapıştırıp Publish et.", "push.errSw": "Uygulama henüz hazır değil, sayfayı yenileyip tekrar dene", "push.errService": "Bildirim servisine kaydolunamadı (tarayıcı ya da ağ engelliyor olabilir)",
     "pw.resetConfirmEmpty": "DİKKAT: Bu cihazda hiç alışkanlık yok. Devam edersen buluttaki tüm alışkanlıklar silinir ve buraya geri yüklenecek bir şey yok. Alışkanlıkların başka bir cihazdaysa orada ESKİ şifreyi bilmen gerekir, o cihazı yeni şifreyle açınca yüklenir. Yine de silinsin mi?",
+    "sync.changePw": "Şifreyi değiştir", "sync.pwChanged": "Şifre değiştirildi", "pw.changeTitle": "Yeni eşitleme şifresi", "pw.changeText": "Alışkanlıkların silinmez: aynı şifreleme anahtarı yeni şifreyle kilitlenir. Diğer cihazlar yeniden giriş istemez.",
     "pw.createTitle": "Eşitleme şifresi belirle", "pw.createText": "Veriler bu şifreyle cihazında şifrelenir, şifreyi bilmeden kimse okuyamaz. Unutursan bulut verisi silinip bu cihazdakiler yeniden yüklenir.",
     "pw.unlockTitle": "Eşitleme şifresi", "pw.unlockText": "Bu hesabın eşitleme şifresini gir.", "pw.label": "Şifre", "pw.confirm": "Şifre (tekrar)", "pw.ok": "Devam", "pw.forgot": "Şifremi unuttum",
-    "pw.mismatch": "Şifreler aynı değil", "pw.short": "En az 8 karakter olmalı", "pw.wrong": "Şifre yanlış", "pw.resetConfirm": "Bulut verisi silinsin ve yeni şifre belirlensin mi? Bu cihazdaki alışkanlıklar yeniden yüklenir.",
+    "pw.mismatch": "Şifreler aynı değil", "pw.short": "En az 8 karakter olmalı", "pw.wrong": "Şifre yanlış", "pw.resetConfirm": "Bulut verisi silinsin ve yeni şifre belirlensin mi? Bu cihazdaki alışkanlıklar yeniden yüklenir. Başka bir cihazda eşitleme açıksa silmek yerine orada Ayarlar > Şifreyi değiştir'i kullan, veri silinmez.",
     "days": ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"],
   },
   en: {
@@ -78,9 +79,10 @@ const I18N = {
     "push.testSent": "Test requested, it should arrive within a few seconds", "push.denied": "Notification permission was not granted", "push.err": "Could not change the notification setting, try again",
     "push.errRules": "Firestore rules are not published. In Firebase > Firestore > Rules paste firestore.rules and Publish.", "push.errSw": "The app is not ready yet, reload the page and try again", "push.errService": "Could not register with the push service (the browser or network may be blocking it)",
     "pw.resetConfirmEmpty": "WARNING: This device has no habits. If you continue, all habits in the cloud are deleted and there is nothing here to upload. If your habits are on another device, open it with the new password afterwards and it uploads them. Delete anyway?",
+    "sync.changePw": "Change password", "sync.pwChanged": "Password changed", "pw.changeTitle": "New sync password", "pw.changeText": "Your habits are not deleted: the same encryption key is locked with the new password. Other devices do not ask again.",
     "pw.createTitle": "Set a sync password", "pw.createText": "Data is encrypted on your device with this password, and nobody can read it without it. If you forget it, the cloud copy is deleted and this device uploads its habits again.",
     "pw.unlockTitle": "Sync password", "pw.unlockText": "Enter this account's sync password.", "pw.label": "Password", "pw.confirm": "Password (again)", "pw.ok": "Continue", "pw.forgot": "Forgot password",
-    "pw.mismatch": "Passwords don't match", "pw.short": "At least 8 characters", "pw.wrong": "Wrong password", "pw.resetConfirm": "Delete the cloud copy and set a new password? This device's habits are uploaded again.",
+    "pw.mismatch": "Passwords don't match", "pw.short": "At least 8 characters", "pw.wrong": "Wrong password", "pw.resetConfirm": "Delete the cloud copy and set a new password? This device's habits are uploaded again. If another device is signed in, use Settings > Change password there instead, nothing is deleted.",
     "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
   },
 };

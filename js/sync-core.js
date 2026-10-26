@@ -65,6 +65,21 @@ export async function verifyCheck(key, check, uid) {
   }
 }
 
+// The data key: a random AES-256 key that encrypts the habits. The password only locks it (the
+// "wrapped" copy in the key document), so changing the password re-locks the same key and no habit
+// has to be re-encrypted. It is extractable so a device that is already unlocked can re-lock it.
+export const newDataKey = () => crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+
+export async function wrapDataKey(kek, dek, uid) {
+  const raw = await crypto.subtle.exportKey("raw", dek);
+  return encryptJSON(kek, { k: toB64(raw) }, `${uid}/wrap`);
+}
+
+export async function unwrapDataKey(kek, wrapped, uid) {
+  const { k } = await decryptJSON(kek, wrapped, `${uid}/wrap`);
+  return crypto.subtle.importKey("raw", fromB64(k), { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
+}
+
 // Merges local habits with the cloud copy, habit by habit; the newer `updatedAt` wins and
 // deletions travel as tombstones.
 //   local:      [{ id, updatedAt, ...fields }]

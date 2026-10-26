@@ -2,8 +2,8 @@
 // device first (see sync-core.js). Loaded by js/app.js only after the user turns sync on.
 //
 // Firestore layout (rules in firestore.rules):
-//   users/{uid}               { v, salt, iter, check }        key parameters
-//   users/{uid}/items/{id}    { iv, ct, updatedAt, deleted }  one per habit
+//   users/{uid}               { v:2, kid, salt, iter, check, wrapped }  the data key, locked by the password
+//   users/{uid}/items/{id}    { iv, ct, updatedAt, deleted }            one per habit, encrypted with the data key
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
@@ -15,6 +15,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
   PBKDF2_ITERATIONS, deriveKey, encryptJSON, decryptJSON, makeCheck, verifyCheck, randomBytes, toB64, fromB64, reconcile,
+  newDataKey, wrapDataKey, unwrapDataKey,
 } from "./sync-core.js";
 
 // Public by design: access is controlled by sign-in and firestore.rules. Filled in js/firebase-config.js.
@@ -70,7 +71,7 @@ export function start(store) {
   }
 
   let user = null;
-  let key = null; // { key: CryptoKey, salt: string }
+  let key = null; // { key: CryptoKey (the data key), kid } (older devices: { key, salt })
   let signingIn = false;
   let unsubscribers = [];
   let remote = new Map();
@@ -187,21 +188,29 @@ export function start(store) {
         email: email(),
         submit: async (pw) => {
           const salt = toB64(randomBytes(16));
-          const k = await deriveKey(pw, fromB64(salt), PBKDF2_ITERATIONS);
-          await setDoc(metaRef(), { v: 1, salt, iter: PBKDF2_ITERATIONS, check: await makeCheck(k, uid) });
-          key = { key: k, salt };
+          const kek = await deriveKey(pw, fromB64(salt), PBKDF2_ITERATIONS);
+          const dek = await newDataKey();
+          const kid = toB64(randomBytes(9));
+          await setDoc(metaRef(), {
+            v: 2, kid, salt, iter: PBKDF2_ITERATIONS, check: await makeCheck(kek, uid), wrapped: await wrapDataKey(kek, dek, uid),
+          });
+          key = { key: dek, kid };
           return true;
         },
       });
     } else {
-      const { salt, iter, check } = meta.data();
+      const m = meta.data();
       result = await store.askPassword({
         mode: "unlock",
         email: email(),
         submit: async (pw) => {
-          const k = await deriveKey(pw, fromB64(salt), iter);
-          if (!(await verifyCheck(k, check, uid))) return false;
-          key = { key: k, salt };
+          const kek = await deriveKey(pw, fromB64(m.salt), m.iter);
+          if (!(await verifyCheck(kek, m.check, uid))) return false;
+          if (m.v === 2) {
+            key = { key: await unwrapDataKey(kek, m.wrapped, uid), kid: m.kid };
+          } else {
+            key = await upgradeLegacy(kek, m, uid);
+          }
           return true;
         },
       });
@@ -223,6 +232,48 @@ export function start(store) {
     } else {
       store.setSyncView({ state: "locked", email: email() });
     }
+  }
+
+  // Accounts made before the data key existed encrypted the habits with the password-derived key itself.
+  // Re-encrypt them with a fresh data key once, so the password can be changed from now on.
+  async function upgradeLegacy(kek, m, uid) {
+    const dek = await newDataKey();
+    const kid = toB64(randomBytes(9));
+    const snap = await getDocs(itemsRef());
+    const writes = [];
+    for (const d of snap.docs) {
+      const x = d.data();
+      if (x.deleted) continue;
+      try {
+        const data = await decryptJSON(kek, x, `${uid}/${d.id}`);
+        writes.push([d.ref, { ...(await encryptJSON(dek, data, `${uid}/${d.id}`)), updatedAt: x.updatedAt, deleted: false }]);
+      } catch (_) { /* written with some other key: skip, a device that has the habit uploads it again */ }
+    }
+    for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      writes.slice(i, i + BATCH_LIMIT).forEach(([ref, data]) => batch.set(ref, data));
+      await batch.commit();
+    }
+    await setDoc(metaRef(), { v: 2, kid, salt: m.salt, iter: m.iter, check: m.check, wrapped: await wrapDataKey(kek, dek, uid) });
+    return { key: dek, kid };
+  }
+
+  // Changing the password from a device that is already unlocked: lock the same data key with the new
+  // password. No habit is touched and the other devices keep working without asking again.
+  async function changePassword() {
+    if (!user || !key || !key.key.extractable || !key.kid) return unlock(); // an older device unlocks once to upgrade
+    const uid = user.uid;
+    const result = await store.askPassword({
+      mode: "change",
+      email: email(),
+      submit: async (pw) => {
+        const salt = toB64(randomBytes(16));
+        const kek = await deriveKey(pw, fromB64(salt), PBKDF2_ITERATIONS);
+        await updateDoc(metaRef(), { v: 2, salt, iter: PBKDF2_ITERATIONS, check: await makeCheck(kek, uid), wrapped: await wrapDataKey(kek, key.key, uid) });
+        return true;
+      },
+    });
+    if (result === "ok") store.toast("sync.pwChanged");
   }
 
   // Forgotten password: drop the cloud copy; this device uploads its habits again.
@@ -253,10 +304,13 @@ export function start(store) {
     store.setSyncView({ state: "on", email: email(), status: "pending" });
     const uid = user.uid;
 
-    // If the password is reset on another device, this key no longer fits.
+    // A changed password keeps the same data key, so nothing happens here. Only a full reset (a new data
+    // key) or an account in the older single-key format that was upgraded makes this key stop fitting.
     unsubscribers.push(onSnapshot(metaRef(), (snap) => {
       if (snap.metadata.fromCache) return;
-      if (!snap.exists() || snap.data().salt !== key.salt) {
+      const m = snap.exists() ? snap.data() : null;
+      const fits = m && (m.v === 2 ? m.kid === key.kid : m.salt === key.salt);
+      if (!fits) {
         stop();
         forgetKey(uid);
         key = null;
@@ -423,6 +477,7 @@ export function start(store) {
     push,
     signIn,
     unlock,
+    changePassword,
     signOut: doSignOut,
     retry: () => (user ? (key ? begin() : unlock()) : signIn()),
   };
