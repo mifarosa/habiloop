@@ -1,5 +1,5 @@
 // Bump this version whenever any cached file changes, so clients pick up the update.
-const CACHE = "habiloop-v29";
+const CACHE = "habiloop-v30";
 
 const ASSETS = [
   "./",
@@ -16,6 +16,7 @@ const ASSETS = [
   "./js/push-config.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
+  "./icons/icon.svg",
   "./icons/apple-touch-icon.png",
 ];
 
