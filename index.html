@@ -40,6 +40,15 @@
     <form id="form" method="dialog">
       <h2 id="form-title"></h2>
       <label><span data-i18n="name">Habit</span><input id="f-name" required maxlength="60" data-i18n-ph="namePh"></label>
+      <div class="rep">
+        <span class="lbl" id="f-presets-label" data-i18n="rep.label">Repeat</span>
+        <div class="chips" id="f-presets" role="group" aria-labelledby="f-presets-label">
+          <button type="button" class="chip-btn" data-preset="1" data-i18n="rep.daily">Daily</button>
+          <button type="button" class="chip-btn" data-preset="7" data-i18n="rep.weekly">Weekly</button>
+          <button type="button" class="chip-btn" data-preset="14" data-i18n="rep.biweekly">Every 2 weeks</button>
+          <button type="button" class="chip-btn" data-preset="30" data-i18n="rep.monthly">Monthly (30 days)</button>
+        </div>
+      </div>
       <div class="two">
         <label><span data-i18n="every">Every</span><input id="f-every" type="number" inputmode="numeric" min="1" max="365" value="3" required></label>
         <label><span data-i18n="grace">Tolerance</span><input id="f-grace" type="number" inputmode="numeric" min="0" max="30" value="1"></label>
