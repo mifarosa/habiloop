@@ -271,6 +271,10 @@ export function start(store) {
   async function changePassword() {
     if (!user || !key || !key.key.extractable || !key.kid) return unlock(); // an older device unlocks once to upgrade
     const uid = user.uid;
+    // With a security question set, changing the password needs the answer first.
+    let m;
+    try { m = (await readMeta()).data(); } catch (err) { return fail(err, "sync.unreachable"); }
+    if (m && m.q && m.qa && !(await askQuestion(m))) return;
     const result = await store.askPassword({
       mode: "change",
       email: email(),
@@ -305,26 +309,29 @@ export function start(store) {
   const loadGate = () => { try { return JSON.parse(localStorage.getItem(GATE_KEY)) || { fails: 0, until: 0 }; } catch (_) { return { fails: 0, until: 0 }; } };
   const saveGate = (state) => { try { localStorage.setItem(GATE_KEY, JSON.stringify(state)); } catch (_) { /* a blocked storage just means no lock */ } };
 
+  // Ask the saved question; true when answered right (five wrong answers lock it for 15 minutes).
+  async function askQuestion(m) {
+    const result = await store.askRecovery({
+      mode: "ask",
+      question: m.q,
+      email: email(),
+      submit: async ({ answer }) => {
+        if (gateLocked(loadGate(), Date.now())) return "locked";
+        const ok = await verifyAnswer(answer, m.qa);
+        saveGate(ok ? gateAfterSuccess() : gateAfterFail(loadGate(), Date.now()));
+        return ok ? true : gateLocked(loadGate(), Date.now()) ? "locked" : false;
+      },
+    });
+    return result === "ok";
+  }
+
   // True when the person may go on to delete the cloud copy.
   //  - With a recovery question: they have to answer it (five wrong answers lock it for 15 minutes).
   //  - Without one (an older account): a fresh Google sign-in, then the account's e-mail and the word typed in.
   // This gate lives in the app: the account's owner can always delete their own data in Firestore, so it
   // protects against accidents and a borrowed unlocked browser, not against someone who owns the Google account.
   async function resetGate(m) {
-    if (m && m.q && m.qa) {
-      const result = await store.askRecovery({
-        mode: "ask",
-        question: m.q,
-        email: email(),
-        submit: async ({ answer }) => {
-          if (gateLocked(loadGate(), Date.now())) return "locked";
-          const ok = await verifyAnswer(answer, m.qa);
-          saveGate(ok ? gateAfterSuccess() : gateAfterFail(loadGate(), Date.now()));
-          return ok ? true : gateLocked(loadGate(), Date.now()) ? "locked" : false;
-        },
-      });
-      return result === "ok";
-    }
+    if (m && m.q && m.qa) return askQuestion(m);
     try {
       await reauthenticateWithPopup(auth.currentUser, new GoogleAuthProvider());
     } catch (err) {
@@ -362,9 +369,16 @@ export function start(store) {
   // -------------------------------------------------------------------------
   // Live sync
   // -------------------------------------------------------------------------
+  // The settings row for the security question is only offered while none is set (q = a question exists).
+  let hasQ = false;
+  let syncStatus = "pending";
+  const showOn = () => store.setSyncView({ state: "on", email: email(), status: syncStatus, q: hasQ });
+
   function begin() {
     stop();
-    store.setSyncView({ state: "on", email: email(), status: "pending" });
+    hasQ = false;
+    syncStatus = "pending";
+    showOn();
     const uid = user.uid;
 
     // A changed password keeps the same data key, so nothing happens here. Only a full reset (a new data
@@ -372,6 +386,7 @@ export function start(store) {
     unsubscribers.push(onSnapshot(metaRef(), (snap) => {
       if (snap.metadata.fromCache) return;
       const m = snap.exists() ? snap.data() : null;
+      if (Boolean(m && m.q && m.qa) !== hasQ) { hasQ = Boolean(m && m.q && m.qa); showOn(); }
       const fits = m && (m.v === 2 ? m.kid === key.kid : m.salt === key.salt);
       if (!fits) {
         stop();
@@ -421,7 +436,8 @@ export function start(store) {
     if (pending.size) flush();
 
     const status = snap.metadata.hasPendingWrites || pending.size ? "pending" : snap.metadata.fromCache ? "offline" : "synced";
-    store.setSyncView({ state: "on", email: email(), status });
+    syncStatus = status;
+    showOn();
   }
 
   async function flush() {
