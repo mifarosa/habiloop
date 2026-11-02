@@ -424,7 +424,7 @@
     let text, actions = "";
     if (v.state === "connecting") text = t("sync.connecting");
     else if (v.state === "locked") { text = t("sync.lockedText", { e: v.email }); actions = btn("sync-unlock", t("sync.unlock")) + btn("sync-signout", t("sync.signout"), "danger"); }
-    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-changepw", t("sync.changePw")) + btn("sync-question", t("sync.question")) + btn("sync-signout", t("sync.signout"), "danger"); }
+    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-changepw", t("sync.changePw")) + (v.q ? "" : btn("sync-question", t("sync.question"))) + btn("sync-signout", t("sync.signout"), "danger"); }
     else if (v.state === "error") { text = t(v.message || "sync.error"); actions = btn("sync-retry", t("sync.retry")) + (v.email ? btn("sync-signout", t("sync.signout"), "danger") : ""); }
     else { text = t("sync.offText"); actions = btn("sync-signin", t("sync.signin")); }
     return `<div class="group"><h3>${t("g.account")}</h3><div class="list"><div class="srow"><span>${text}</span></div>${actions ? `<div class="srow">${actions}</div>` : ""}</div></div>`;
