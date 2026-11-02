@@ -2,7 +2,7 @@ const I18N = {
   tr: {
     "nav.habits": "Bugün", "nav.calendar": "Takvim", "nav.settings": "Ayarlar", "new": "Yeni", "title.calendar": "Takvim", "title.settings": "Ayarlar",
     "sub.none": "Henüz alışkanlık yok.", "sub.clear": "Hepsi yolunda, bugün yapılacak bir şey yok.", "sub.due": "{n} alışkanlık seni bekliyor.",
-    "sec.due": "Sırası geldi", "sec.soon": "Yaklaşanlar",
+    "soon.more": "Daha çok göster ({n})", "soon.less": "Daha az göster", "sec.due": "Sırası geldi", "sec.soon": "Yaklaşanlar",
     "empty.title": "Boş bir sayfa", "empty.text": "Sağ üstteki “Yeni” ile ilk alışkanlığını ekle. Kaç günde bir yapacağını seç, günü gelince sana sorayım.",
     "every": "Kaç günde bir?", "grace": "Tolerans (gün)", "time": "Hatırlatma saati", "name": "Alışkanlık", "namePh": "Kedi kumunu temizle",
     "hint": "İdeal gün: yaptıktan {n} gün sonra. Son gün: ideal günden {g} gün sonra.", "hint0": "İdeal gün: yaptıktan {n} gün sonra. Tolerans yok, o gün son gündür.",
@@ -45,7 +45,7 @@ const I18N = {
   en: {
     "nav.habits": "Today", "nav.calendar": "Calendar", "nav.settings": "Settings", "new": "New", "title.calendar": "Calendar", "title.settings": "Settings",
     "sub.none": "No habits yet.", "sub.clear": "All good, nothing to do today.", "sub.due": "{n} habits are waiting for you.",
-    "sec.due": "Due now", "sec.soon": "Coming up",
+    "soon.more": "Show more ({n})", "soon.less": "Show less", "sec.due": "Due now", "sec.soon": "Coming up",
     "empty.title": "A blank page", "empty.text": "Tap “New” at the top right to add your first habit. Pick how many days apart you do it, and I’ll ask when the day comes.",
     "every": "Every how many days?", "grace": "Tolerance (days)", "time": "Reminder time", "name": "Habit", "namePh": "Clean the litter box",
     "hint": "Ideal day: {n} days after you do it. Last day: {g} days after the ideal day.", "hint0": "Ideal day: {n} days after you do it. No tolerance, so that day is the last day.",

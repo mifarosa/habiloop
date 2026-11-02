@@ -6,7 +6,7 @@
 
   let state = load();
   let view = "habits", detailId = null, editingId = null;
-  let asking = null, calMonth = null, calSel = null;
+  let asking = null, calMonth = null, calSel = null, soonAll = false;
 
   function load() {
     try {
@@ -88,6 +88,8 @@
   }
   const rule = (h) => (h.grace ? t("ruleGrace", { n: h.every, g: h.grace }) : t("rule", { n: h.every }));
 
+  const SOON_SHOWN = 5;
+
   function row(h, st, day) {
     const due = st.state !== "ok";
     return `<div class="row s-${st.state}" role="button" tabindex="0" data-act="open" data-id="${h.id}">
@@ -107,7 +109,12 @@
     let html = `<p class="sub">${!items.length ? t("sub.none") : due.length ? t("sub.due", { n: due.length }) : t("sub.clear")}</p>`;
     if (!items.length) html += `<div class="list empty"><h2>${t("empty.title")}</h2><p>${t("empty.text")}</p></div>`;
     if (due.length) html += `<h3 class="sec">${t("sec.due")}</h3><div class="list">${due.map((x) => row(x.h, x.st)).join("")}</div>`;
-    if (soon.length) html += `<h3 class="sec">${t("sec.soon")}</h3><div class="list">${soon.map((x) => row(x.h, x.st)).join("")}</div>`;
+    if (soon.length) {
+      // Only the nearest few are shown at first; the rest sit behind a button.
+      const shown = soonAll ? soon : soon.slice(0, SOON_SHOWN);
+      html += `<h3 class="sec">${t("sec.soon")}</h3><div class="list">${shown.map((x) => row(x.h, x.st)).join("")}</div>`;
+      if (soon.length > SOON_SHOWN) html += `<button class="linkbtn more" data-act="soonmore">${soonAll ? t("soon.less") : t("soon.more", { n: soon.length - SOON_SHOWN })}</button>`;
+    }
     return html + coffee();
   }
 
@@ -476,6 +483,7 @@
     else if (act === "accept") { h.every = +n; h.dismissed = null; save(); render(); }
     else if (act === "dismiss") { h.dismissed = +n; save(); render(); }
     else if (act === "day") { calSel = d; render(); }
+    else if (act === "soonmore") { soonAll = !soonAll; render(); }
     else if (act === "unlog") { h.logs = h.logs.filter((x) => x !== d); save(); render(); }
     else if (act === "prevm") { calMonth = calMonth.m ? { y: calMonth.y, m: calMonth.m - 1 } : { y: calMonth.y - 1, m: 11 }; render(); }
     else if (act === "nextm") { calMonth = calMonth.m < 11 ? { y: calMonth.y, m: calMonth.m + 1 } : { y: calMonth.y + 1, m: 0 }; render(); }
