@@ -14,7 +14,7 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 ## Features
 - Habits sorted by urgency, with a one-tap **Done** button and **Another day** (pick any of the last 14 days).
 - **Repeat** shortcuts when adding a habit: daily, weekly, every 2 weeks, monthly (30 days). They just fill in the interval, so any number of days still works.
-- The calendar starts with **Up next**: each habit once, with the day of its next job, and that day is flagged in the month grid.
+- The calendar starts with **Up next**: each habit once, with the day of its next job, and that day is flagged in the month grid. Tap any day, also a future one, to see what is scheduled then (ideal day or last day), or what was logged.
 - "It's time" prompt once a day after the reminder time; optional browser notifications while the app is open or in the background.
 - On-time rate (share of cycles done by the last day) instead of a streak.
 - Interval suggestion after 5+ entries when your real rhythm differs.
@@ -40,6 +40,8 @@ Sync is off until a Firebase project is configured; with an empty `js/firebase-c
 5. Put the web app's config values into `js/firebase-config.js`. They are public by design; access is enforced by sign-in and the rules.
 
 Habits are merged one by one (the newer edit wins) and deletions travel as tombstones.
+
+**Security question.** "Forgot password" deletes the cloud copy (the habits are encrypted with the password, so nobody can recover them without it). To keep that from happening by accident, the app asks for a question and answer when sync is first set up, and asks it again before offering the deletion. Five wrong answers lock it for 15 minutes. The answer does not unlock the data; only the password does. It is stored as a salted PBKDF2 hash, the question as plain text so it can be shown to someone who cannot unlock. Accounts made before this get asked on their next unlock (they can say "not now"), and **Settings > Account > Security question** changes it. An account that never set one has to sign in with Google again and type its e-mail and the word `DELETE` (`SİL`). This gate lives in the app: the owner of the Google account can always delete their own data in Firestore, so it guards against accidents and a borrowed unlocked browser, not against someone who owns the account. After updating, paste `firestore.rules` into Firestore **Rules** and publish it again (it now allows the `q` and `qa` fields), otherwise saving the question fails with "Access denied".
 
 The habits are encrypted with a random data key; the sync password only locks that key. **Settings > Change password** re-locks the same key with a new password: no habit is re-encrypted or deleted, and devices that are already signed in keep working. Only "Forgot password" (no signed-in device left) wipes the cloud copy and re-uploads from a device that still has the habits.
 

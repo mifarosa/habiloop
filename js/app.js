@@ -124,13 +124,17 @@
     for (let d = 1; d <= count; d++) {
       const ds = S.str(Math.floor(first / S.DAY) + d - 1), n = state.habits.filter((h) => h.logs.includes(ds)).length;
       const jobs = dueDays.get(ds), label = jobs ? ` aria-label="${esc(`${fmt(ds)}: ${jobs.join(", ")}`)}"` : "";
-      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}${jobs ? " due" : ""}" data-act="day" data-d="${ds}"${label} ${ds > today() ? "disabled" : ""}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
+      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}${jobs ? " due" : ""}" data-act="day" data-d="${ds}"${label}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
     }
     const done = state.habits.filter((h) => h.logs.includes(calSel));
+    const plan = S.jobsOn(state.habits, calSel, today());
+    const planned = plan.length ? `<p class="lbl gap">${t("cal.plan")}</p><div class="list">${plan.map(({ h, kind }) => `<div class="entry" role="button" tabindex="0" data-act="open" data-id="${h.id}"><span>${esc(h.name)}</span><span class="muted">${t(kind === "last" ? "cal.last" : "cal.ideal")}</span></div>`).join("")}</div>` : "";
+    const logged = done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : "";
+    const none = plan.length || done.length ? "" : `<p class="muted">${t(calSel > today() ? "cal.planNone" : "cal.none")}</p>`;
     const next = up.length ? `<h3 class="sec first">${t("cal.next")}</h3><div class="list">${up.map((x) => row(x.h, x.st, x.day)).join("")}</div>` : "";
     return `${next}<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${mt}</strong><button data-act="nextm" aria-label="›">›</button></div>
       <div class="cal">${cells}</div>${dueDays.size ? `<p class="hint legend">${t("cal.legend")}</p>` : ""}<h3 class="sec">${fmt(calSel)}</h3>
-      ${done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : `<p class="muted">${t("cal.none")}</p>`}`;
+      ${planned}${logged}${none}`;
   }
 
   function renderSettings() {
@@ -360,6 +364,39 @@
     });
   }
 
+  // The recovery question dialog. mode "set": ask for a question and its answer (soft: "Not now" is allowed);
+  // "ask": show the saved question; "fallback": no question was ever set, so type the e-mail and the word.
+  // submit gets the typed values and returns true, or a reason: "short" / "same" (set), "locked" (ask), or false.
+  function askRecovery({ mode, soft, question, email, submit }) {
+    return new Promise((resolve) => {
+      const d = $("#rq-dialog"), set = mode === "set", ask = mode === "ask", fb = mode === "fallback";
+      $("#rq-title").textContent = t(set ? "pw.qTitle" : ask ? "pw.askTitle" : "pw.fbTitle");
+      $("#rq-text").textContent = set ? t("pw.qText") : ask ? question : t("pw.fbText", { e: email });
+      $("#rq-hint").textContent = set ? t("pw.qWarn") : "";
+      $("#rq-q-wrap").hidden = !set; $("#rq-a-wrap").hidden = fb; $("#rq-e-wrap").hidden = !fb; $("#rq-w-wrap").hidden = !fb;
+      $("#rq-q").value = ""; $("#rq-a").value = ""; $("#rq-e").value = ""; $("#rq-w").value = ""; $("#rq-err").textContent = "";
+      $("#rq-cancel").textContent = t(set && soft ? "pw.later" : "cancel");
+      const go = $("#rq-ok");
+      $("#rq-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const err = $("#rq-err");
+        err.textContent = "";
+        if (!set && (ask ? !$("#rq-a").value.trim() : !$("#rq-e").value.trim() || !$("#rq-w").value.trim())) return;
+        go.disabled = true;
+        try {
+          const out = await submit({ question: $("#rq-q").value.trim(), answer: $("#rq-a").value, typedEmail: $("#rq-e").value, word: $("#rq-w").value });
+          if (out === true) { d.close(); resolve("ok"); } else err.textContent = t({ locked: "pw.askLocked", same: "pw.qSame", short: "pw.qShort" }[out] || (fb ? "pw.fbWrong" : "pw.askWrong"));
+        } catch (e2) { err.textContent = t(e2 && e2.code === "permission-denied" ? "sync.rulesDenied" : "sync.error"); }
+        go.disabled = false;
+      };
+      const leave = () => { d.close(); resolve(set && soft ? "skip" : "cancel"); };
+      $("#rq-cancel").onclick = leave;
+      d.oncancel = () => resolve(set && soft ? "skip" : "cancel");
+      d.showModal();
+      $(set ? "#rq-q" : fb ? "#rq-e" : "#rq-a").focus();
+    });
+  }
+
   const syncStore = {
     getHabits: () => state.habits, getTombstones: () => state.tombstones, normalize, pack,
     applyRemote(habits, tombstones) {
@@ -369,7 +406,7 @@
       persist(); render();
     },
     onLocalChange: (fn) => syncListeners.push(fn),
-    lang, pushJobs: () => buildJobs(), setSyncView, setSyncEnabled, toast: (k) => toast(t(k)), confirm: (k) => confirmAction(t(k)), askPassword,
+    lang, pushJobs: () => buildJobs(), setSyncView, setSyncEnabled, toast: (k) => toast(t(k)), confirm: (k) => confirmAction(t(k)), askPassword, askRecovery,
   };
   function loadSync() {
     if (!syncPromise) {
@@ -387,7 +424,7 @@
     let text, actions = "";
     if (v.state === "connecting") text = t("sync.connecting");
     else if (v.state === "locked") { text = t("sync.lockedText", { e: v.email }); actions = btn("sync-unlock", t("sync.unlock")) + btn("sync-signout", t("sync.signout"), "danger"); }
-    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-changepw", t("sync.changePw")) + btn("sync-signout", t("sync.signout"), "danger"); }
+    else if (v.state === "on") { text = t("sync.onText", { e: v.email }) + " · " + t(v.status === "offline" ? "sync.offline" : v.status === "pending" ? "sync.pending" : "sync.synced"); actions = btn("sync-changepw", t("sync.changePw")) + btn("sync-question", t("sync.question")) + btn("sync-signout", t("sync.signout"), "danger"); }
     else if (v.state === "error") { text = t(v.message || "sync.error"); actions = btn("sync-retry", t("sync.retry")) + (v.email ? btn("sync-signout", t("sync.signout"), "danger") : ""); }
     else { text = t("sync.offText"); actions = btn("sync-signin", t("sync.signin")); }
     return `<div class="group"><h3>${t("g.account")}</h3><div class="list"><div class="srow"><span>${text}</span></div>${actions ? `<div class="srow">${actions}</div>` : ""}</div></div>`;
@@ -453,6 +490,7 @@
     else if (act === "sync-unlock") runSync("unlock");
     else if (act === "sync-signout") runSync("signOut");
     else if (act === "sync-changepw") runSync("changePassword");
+    else if (act === "sync-question") runSync("setQuestion");
     else if (act === "sync-retry") runSync("retry");
     else if (act === "test") showNotification(t("test.title"), t("test.body"));
     else if (act === "export") {

@@ -89,6 +89,24 @@
       <button type="button" id="confirm-yes" class="btn solid danger-solid" data-i18n="delete">Delete</button></div>
   </dialog>
 
+  <dialog id="rq-dialog">
+    <form id="rq-form">
+      <h2 id="rq-title"></h2>
+      <p id="rq-text" class="muted"></p>
+      <label id="rq-q-wrap"><span data-i18n="pw.qLabel">Question</span><input id="rq-q" maxlength="120" autocomplete="off" data-i18n-ph="pw.qPh"></label>
+      <label id="rq-a-wrap"><span data-i18n="pw.aLabel">Answer</span><input id="rq-a" maxlength="80" autocomplete="off"></label>
+      <label id="rq-e-wrap"><span data-i18n="pw.fbEmail">Google e-mail</span><input id="rq-e" type="email" autocomplete="off"></label>
+      <label id="rq-w-wrap"><span data-i18n="pw.fbWord">Type DELETE</span><input id="rq-w" autocomplete="off"></label>
+      <p id="rq-hint" class="hint"></p>
+      <p id="rq-err" class="hint err"></p>
+      <div class="actions">
+        <span class="grow"></span>
+        <button type="button" id="rq-cancel" class="btn quiet"></button>
+        <button type="submit" id="rq-ok" class="btn solid" data-i18n="pw.ok">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="pw-dialog">
     <form id="pw-form">
       <h2 id="pw-title"></h2>
