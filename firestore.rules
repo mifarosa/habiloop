@@ -9,10 +9,12 @@ service cloud.firestore {
     }
 
     // The data key, locked by the password (PBKDF2). Older accounts only have v, salt, iter, check.
+    // q / qa: the recovery question (plain text) and the salted hash of its answer. They only gate
+    // "forgot password", which deletes the cloud copy; the answer does not unlock the data.
     match /users/{uid} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['v', 'kid', 'salt', 'iter', 'check', 'wrapped'])
+        && request.resource.data.keys().hasOnly(['v', 'kid', 'salt', 'iter', 'check', 'wrapped', 'q', 'qa'])
         && request.resource.data.v is int
         && request.resource.data.salt is string && request.resource.data.salt.size() <= 64
         && request.resource.data.iter is int && request.resource.data.iter >= 100000
@@ -20,7 +22,13 @@ service cloud.firestore {
         && request.resource.data.check.keys().hasOnly(['iv', 'ct'])
         && (!('kid' in request.resource.data) || (request.resource.data.kid is string && request.resource.data.kid.size() <= 32))
         && (!('wrapped' in request.resource.data) || (request.resource.data.wrapped is map
-            && request.resource.data.wrapped.keys().hasOnly(['iv', 'ct'])));
+            && request.resource.data.wrapped.keys().hasOnly(['iv', 'ct'])))
+        && (!('q' in request.resource.data) || (request.resource.data.q is string && request.resource.data.q.size() <= 120))
+        && (!('qa' in request.resource.data) || (request.resource.data.qa is map
+            && request.resource.data.qa.keys().hasOnly(['salt', 'iter', 'h'])
+            && request.resource.data.qa.salt is string && request.resource.data.qa.salt.size() <= 64
+            && request.resource.data.qa.iter is int && request.resource.data.qa.iter >= 100000
+            && request.resource.data.qa.h is string && request.resource.data.qa.h.size() <= 64));
 
       // One document per habit.
       match /items/{itemId} {

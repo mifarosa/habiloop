@@ -41,6 +41,8 @@ Sync is off until a Firebase project is configured; with an empty `js/firebase-c
 
 Habits are merged one by one (the newer edit wins) and deletions travel as tombstones.
 
+**Security question.** "Forgot password" deletes the cloud copy (the habits are encrypted with the password, so nobody can recover them without it). To keep that from happening by accident, the app asks for a question and answer when sync is first set up, and asks it again before offering the deletion. Five wrong answers lock it for 15 minutes. The answer does not unlock the data; only the password does. It is stored as a salted PBKDF2 hash, the question as plain text so it can be shown to someone who cannot unlock. Accounts made before this get asked on their next unlock (they can say "not now"), and **Settings > Account > Security question** changes it. An account that never set one has to sign in with Google again and type its e-mail and the word `DELETE` (`SİL`). This gate lives in the app: the owner of the Google account can always delete their own data in Firestore, so it guards against accidents and a borrowed unlocked browser, not against someone who owns the account. After updating, paste `firestore.rules` into Firestore **Rules** and publish it again (it now allows the `q` and `qa` fields), otherwise saving the question fails with "Access denied".
+
 The habits are encrypted with a random data key; the sync password only locks that key. **Settings > Change password** re-locks the same key with a new password: no habit is re-encrypted or deleted, and devices that are already signed in keep working. Only "Forgot password" (no signed-in device left) wipes the cloud copy and re-uploads from a device that still has the habits.
 
 ## Server notifications (optional)

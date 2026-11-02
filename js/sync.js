@@ -2,12 +2,13 @@
 // device first (see sync-core.js). Loaded by js/app.js only after the user turns sync on.
 //
 // Firestore layout (rules in firestore.rules):
-//   users/{uid}               { v:2, kid, salt, iter, check, wrapped }  the data key, locked by the password
+//   users/{uid}               { v:2, kid, salt, iter, check, wrapped, q, qa }  the data key, locked by the password;
+//                             q/qa: the recovery question and the hash of its answer (gate for "forgot password")
 //   users/{uid}/items/{id}    { iv, ct, updatedAt, deleted }            one per habit, encrypted with the data key
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut,
+  getAuth, GoogleAuthProvider, onAuthStateChanged, reauthenticateWithPopup, signInWithPopup, signInWithRedirect, signOut,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   initializeFirestore, getFirestore, persistentLocalCache,
@@ -16,12 +17,14 @@ import {
 import {
   PBKDF2_ITERATIONS, deriveKey, encryptJSON, decryptJSON, makeCheck, verifyCheck, randomBytes, toB64, fromB64, reconcile,
   newDataKey, wrapDataKey, unwrapDataKey,
+  makeAnswerRecord, verifyAnswer, checkQuestion, gateLocked, gateAfterFail, gateAfterSuccess, fallbackOk,
 } from "./sync-core.js";
 
 // Public by design: access is controlled by sign-in and firestore.rules. Filled in js/firebase-config.js.
 const firebaseConfig = window.HABILOOP_FIREBASE;
 
 const SIGNIN_FLAG = "habiloop.signingIn"; // survives the redirect so the password prompt follows
+const GATE_KEY = "habiloop.askGate"; // wrong recovery answers so far, kept on this device
 const PUSH_DELAY = 400;
 const BATCH_LIMIT = 400;
 
@@ -180,9 +183,10 @@ export function start(store) {
       return fail(err, err && err.code === "permission-denied" ? "sync.rulesDenied" : "sync.unreachable");
     }
     const uid = user.uid;
+    const existing = meta.exists() ? meta.data() : null;
     let result;
 
-    if (!meta.exists()) {
+    if (!existing) {
       result = await store.askPassword({
         mode: "create",
         email: email(),
@@ -220,7 +224,11 @@ export function start(store) {
       await saveKey(uid, key);
       store.toast("sync.started");
       begin();
+      // A new account, or an older one without a question, is asked for one now (it can say "not now").
+      if (!existing || !existing.q) setQuestion({ soft: true }).catch(() => {});
     } else if (result === "forgot") {
+      // Deleting the cloud copy is only offered to someone who can prove it is theirs.
+      if (!(await resetGate(existing))) return unlock();
       // On a device with no habits nothing gets re-uploaded, so the warning is much stronger.
       if (!(await store.confirm(store.getHabits().length ? "pw.resetConfirm" : "pw.resetConfirmEmpty"))) return unlock();
       try {
@@ -274,6 +282,61 @@ export function start(store) {
       },
     });
     if (result === "ok") store.toast("sync.pwChanged");
+  }
+
+  // The recovery question: kept in the key document so it can be shown to someone who cannot unlock.
+  // It only gates the reset, the data stays protected by the password alone.
+  async function setQuestion({ soft = false } = {}) {
+    if (!user) return;
+    const result = await store.askRecovery({
+      mode: "set",
+      soft,
+      email: email(),
+      submit: async ({ question, answer }) => {
+        const bad = checkQuestion(question, answer);
+        if (bad) return bad;
+        await updateDoc(metaRef(), { q: question, qa: await makeAnswerRecord(answer) });
+        return true;
+      },
+    });
+    if (result === "ok") store.toast("sync.questionSaved");
+  }
+
+  const loadGate = () => { try { return JSON.parse(localStorage.getItem(GATE_KEY)) || { fails: 0, until: 0 }; } catch (_) { return { fails: 0, until: 0 }; } };
+  const saveGate = (state) => { try { localStorage.setItem(GATE_KEY, JSON.stringify(state)); } catch (_) { /* a blocked storage just means no lock */ } };
+
+  // True when the person may go on to delete the cloud copy.
+  //  - With a recovery question: they have to answer it (five wrong answers lock it for 15 minutes).
+  //  - Without one (an older account): a fresh Google sign-in, then the account's e-mail and the word typed in.
+  // This gate lives in the app: the account's owner can always delete their own data in Firestore, so it
+  // protects against accidents and a borrowed unlocked browser, not against someone who owns the Google account.
+  async function resetGate(m) {
+    if (m && m.q && m.qa) {
+      const result = await store.askRecovery({
+        mode: "ask",
+        question: m.q,
+        email: email(),
+        submit: async ({ answer }) => {
+          if (gateLocked(loadGate(), Date.now())) return "locked";
+          const ok = await verifyAnswer(answer, m.qa);
+          saveGate(ok ? gateAfterSuccess() : gateAfterFail(loadGate(), Date.now()));
+          return ok ? true : gateLocked(loadGate(), Date.now()) ? "locked" : false;
+        },
+      });
+      return result === "ok";
+    }
+    try {
+      await reauthenticateWithPopup(auth.currentUser, new GoogleAuthProvider());
+    } catch (err) {
+      // Some installed apps cannot open the sign-in window; the typed confirmation below still applies.
+      if (!["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(err && err.code)) return false;
+    }
+    const result = await store.askRecovery({
+      mode: "fallback",
+      email: email(),
+      submit: async (typed) => fallbackOk(typed, email()),
+    });
+    return result === "ok";
   }
 
   // Forgotten password: drop the cloud copy; this device uploads its habits again.
@@ -478,6 +541,7 @@ export function start(store) {
     signIn,
     unlock,
     changePassword,
+    setQuestion,
     signOut: doSignOut,
     retry: () => (user ? (key ? begin() : unlock()) : signIn()),
   };

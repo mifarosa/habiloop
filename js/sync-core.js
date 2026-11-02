@@ -117,3 +117,73 @@ export function reconcile({ local, tombstones, remote, normalize }) {
   const changed = JSON.stringify(habits) !== JSON.stringify(local) || JSON.stringify(tomb) !== JSON.stringify(tombstones);
   return { habits, tombstones: tomb, changed, push };
 }
+
+// ---------------------------------------------------------------------------
+// Recovery question: the gate in front of "forgot password", which deletes the cloud copy.
+// The answer never unlocks the data (only the password does); it only decides whether the
+// deletion may be offered. The question is stored as plain text so it can be shown to someone
+// who cannot unlock; the answer only as a salted PBKDF2 hash.
+// ---------------------------------------------------------------------------
+
+// Case, accents, the Turkish dotless i and extra spaces do not matter: "Mırmır", "MİRMİR" and
+// " mirmir " are the same answer, so a different keyboard does not lock the owner out.
+export function normalizeAnswer(text) {
+  return String(text ?? "")
+    .normalize("NFC")
+    .toLocaleLowerCase("tr")
+    .replace(/ı/g, "i")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function answerHash(answer, salt, iterations) {
+  const base = await crypto.subtle.importKey("raw", enc.encode(normalizeAnswer(answer)), "PBKDF2", false, ["deriveBits"]);
+  return toB64(await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, base, 256));
+}
+
+export async function makeAnswerRecord(answer, iterations = PBKDF2_ITERATIONS) {
+  const salt = randomBytes(16);
+  return { salt: toB64(salt), iter: iterations, h: await answerHash(answer, salt, iterations) };
+}
+
+// Compares in constant time; any malformed record simply fails.
+export async function verifyAnswer(answer, record) {
+  try {
+    const got = await answerHash(answer, fromB64(record.salt), record.iter);
+    if (got.length !== record.h.length) return false;
+    let diff = 0;
+    for (let i = 0; i < got.length; i++) diff |= got.charCodeAt(i) ^ record.h.charCodeAt(i);
+    return diff === 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Wrong answers lock the question for a while, so it cannot be guessed at the keyboard.
+export const GATE_MAX_TRIES = 5;
+export const GATE_WAIT_MS = 15 * 60 * 1000;
+
+// state: { fails, until } (until = time in ms before which no try is allowed)
+export const gateLocked = (state, now) => Boolean(state && state.until > now);
+export const gateMinutesLeft = (state, now) => Math.max(0, Math.ceil((state.until - now) / 60000));
+export function gateAfterFail(state, now) {
+  const fails = ((state && state.fails) || 0) + 1;
+  return fails >= GATE_MAX_TRIES ? { fails: 0, until: now + GATE_WAIT_MS } : { fails, until: 0 };
+}
+export const gateAfterSuccess = () => ({ fails: 0, until: 0 });
+
+// For an account that never set a question: the typed e-mail and the word have to match.
+export function fallbackOk({ typedEmail, word }, accountEmail) {
+  const w = normalizeAnswer(word);
+  return Boolean(accountEmail) && normalizeAnswer(typedEmail) === normalizeAnswer(accountEmail) && (w === "sil" || w === "delete");
+}
+
+// A question and answer that can be saved: not empty, and the answer is not written in the question.
+export function checkQuestion(question, answer) {
+  const q = String(question ?? "").trim(), a = normalizeAnswer(answer);
+  if (q.length < 8 || q.length > 120 || a.length < 2) return "short";
+  if (normalizeAnswer(q).includes(a)) return "same";
+  return null;
+}
