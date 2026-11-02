@@ -54,6 +54,33 @@
     return now.getHours() * 60 + now.getMinutes() >= hh * 60 + mm;
   }
 
+  // One entry per active habit: the day its next job falls on. That is today for a habit that is due
+  // (ideal or final day), the ideal day while it is still resting, and the missed final day when it is late.
+  // Habits that are due or late come first, most urgent first; then the resting ones, nearest first.
+  function upcoming(habits, today) {
+    const t = num(today);
+    return habits.filter((h) => !h.archived).map((h) => {
+      const st = status(h, today);
+      const day = st.state === "ok" ? st.ideal : st.state === "late" ? st.deadline : t;
+      return { h, st, day: str(day) };
+    }).sort((a, b) => {
+      const aRest = a.st.state === "ok", bRest = b.st.state === "ok";
+      if (aRest !== bRest) return aRest ? 1 : -1;
+      return (aRest ? a.st.ideal - b.st.ideal : a.st.deadline - b.st.deadline) || a.h.name.localeCompare(b.h.name);
+    });
+  }
+
+  // Habit names by day for marking the calendar: each habit appears once, on its next job day.
+  // Days before today (a late habit) are left out, the list says "N days overdue" for those.
+  function nearestDays(habits, today) {
+    const days = new Map();
+    for (const { h, day } of upcoming(habits, today)) {
+      if (num(day) < num(today)) continue;
+      days.set(day, [...(days.get(day) || []), h.name]);
+    }
+    return days;
+  }
+
   // The reminders the server should send for a habit: the ideal day, the last day (when there is
   // a tolerance) and each of the next `lateDays` days after it. Each has a local day and a stage.
   function reminders(h, lateDays = 7) {
@@ -71,6 +98,6 @@
     return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
   }
 
-  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk };
+  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays };
   if (typeof module !== "undefined") module.exports = api; else root.Schedule = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

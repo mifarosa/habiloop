@@ -13,6 +13,8 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 
 ## Features
 - Habits sorted by urgency, with a one-tap **Done** button and **Another day** (pick any of the last 14 days).
+- **Repeat** shortcuts when adding a habit: daily, weekly, every 2 weeks, monthly (30 days). They just fill in the interval, so any number of days still works.
+- The calendar starts with **Up next**: each habit once, with the day of its next job, and that day is flagged in the month grid.
 - "It's time" prompt once a day after the reminder time; optional browser notifications while the app is open or in the background.
 - On-time rate (share of cycles done by the last day) instead of a streak.
 - Interval suggestion after 5+ entries when your real rhythm differs.
@@ -25,6 +27,8 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 
 ## Run
 No build step. Serve the folder with any static server, for example `python -m http.server`, and open http://localhost:8000.
+
+Tests (Node 20+, no install needed): `node --test "tests/*.test.mjs"` for the habit logic, `cd server && npm test` for the notification server.
 
 ## Sync setup
 Sync is off until a Firebase project is configured; with an empty `js/firebase-config.js` the account section stays hidden.
@@ -47,7 +51,7 @@ Setup is one command, see [`server/README.md`](server/README.md). Then paste the
 ## Files
 | File | Purpose |
 | --- | --- |
-| `js/schedule.js` | Window, on-time rate and interval suggestion logic (pure functions) |
+| `js/schedule.js` | Window, on-time rate, interval suggestion and "up next" logic (pure functions, tested in `tests/`) |
 | `js/app.js` | UI: habits, calendar, settings, prompts |
 | `js/i18n.js` | Turkish and English strings |
 | `js/sync.js`, `js/sync-core.js`, `js/firebase-config.js` | Optional Google sync: Firebase wiring, encryption and merge, config |

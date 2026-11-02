@@ -88,11 +88,11 @@
   }
   const rule = (h) => (h.grace ? t("ruleGrace", { n: h.every, g: h.grace }) : t("rule", { n: h.every }));
 
-  function row(h, st) {
+  function row(h, st, day) {
     const due = st.state !== "ok";
     return `<div class="row s-${st.state}" role="button" tabindex="0" data-act="open" data-id="${h.id}">
       ${ring(st)}
-      <div class="txt"><b>${esc(h.name)}</b><span>${statusText(st)}</span>${S.suggest(h) ? ` <span class="m">· ${t("hasSuggest")}</span>` : ""}</div>
+      <div class="txt"><b>${esc(h.name)}</b><span>${statusText(st)}${day && day !== today() ? ` · ${fmt(day)}` : ""}</span>${S.suggest(h) ? ` <span class="m">· ${t("hasSuggest")}</span>` : ""}</div>
       ${due ? `<button class="go" data-act="done" data-id="${h.id}">${t("done")}</button>` : ""}</div>`;
   }
 
@@ -119,14 +119,17 @@
     const lead = (new Date(first).getUTCDay() + 6) % 7;
     $("#title").textContent = t("title.calendar");
     const mt = new Date(first).toLocaleDateString(lang(), { month: "long", year: "numeric", timeZone: "UTC" });
+    const up = S.upcoming(state.habits, today()), dueDays = S.nearestDays(state.habits, today());
     let cells = I18N[lang()].days.map((d) => `<span class="h">${d}</span>`).join("") + "<span></span>".repeat(lead);
     for (let d = 1; d <= count; d++) {
       const ds = S.str(Math.floor(first / S.DAY) + d - 1), n = state.habits.filter((h) => h.logs.includes(ds)).length;
-      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}" data-act="day" data-d="${ds}" ${ds > today() ? "disabled" : ""}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
+      const jobs = dueDays.get(ds), label = jobs ? ` aria-label="${esc(`${fmt(ds)}: ${jobs.join(", ")}`)}"` : "";
+      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}${jobs ? " due" : ""}" data-act="day" data-d="${ds}"${label} ${ds > today() ? "disabled" : ""}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
     }
     const done = state.habits.filter((h) => h.logs.includes(calSel));
-    return `<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${mt}</strong><button data-act="nextm" aria-label="›">›</button></div>
-      <div class="cal">${cells}</div><h3 class="sec">${fmt(calSel)}</h3>
+    const next = up.length ? `<h3 class="sec first">${t("cal.next")}</h3><div class="list">${up.map((x) => row(x.h, x.st, x.day)).join("")}</div>` : "";
+    return `${next}<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${mt}</strong><button data-act="nextm" aria-label="›">›</button></div>
+      <div class="cal">${cells}</div>${dueDays.size ? `<p class="hint legend">${t("cal.legend")}</p>` : ""}<h3 class="sec">${fmt(calSel)}</h3>
       ${done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : `<p class="muted">${t("cal.none")}</p>`}`;
   }
 
@@ -226,6 +229,7 @@
   function updateHint() {
     const n = Math.max(1, parseInt($("#f-every").value) || 1), g = Math.max(0, parseInt($("#f-grace").value) || 0);
     $("#f-hint").textContent = g ? t("hint", { n, g }) : t("hint0", { n });
+    document.querySelectorAll("#f-presets [data-preset]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.preset === n)));
   }
   function openForm(id) {
     editingId = id || null;
@@ -250,6 +254,13 @@
     $("#form-dialog").showModal();
   }
   $("#f-every").oninput = $("#f-grace").oninput = updateHint;
+  // The repeat buttons only fill in the interval; the number field stays the single source of truth.
+  $("#f-presets").onclick = (e) => {
+    const b = e.target.closest("[data-preset]");
+    if (!b) return;
+    $("#f-every").value = b.dataset.preset;
+    updateHint();
+  };
   $("#form").onsubmit = () => {
     const name = $("#f-name").value.trim(); if (!name) return;
     const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null };
