@@ -14,7 +14,7 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 ## Features
 - Habits sorted by urgency, with a one-tap **Done** button and **Another day** (pick any of the last 14 days).
 - **Repeat** shortcuts when adding a habit: daily, weekly, every 2 weeks, monthly (30 days). They just fill in the interval, so any number of days still works.
-- The calendar starts with **Up next**: each habit once, with the day of its next job, and that day is flagged in the month grid.
+- The calendar starts with **Up next**: each habit once, with the day of its next job, and that day is flagged in the month grid. Tap any day, also a future one, to see what is scheduled then (ideal day or last day), or what was logged.
 - "It's time" prompt once a day after the reminder time; optional browser notifications while the app is open or in the background.
 - On-time rate (share of cycles done by the last day) instead of a streak.
 - Interval suggestion after 5+ entries when your real rhythm differs.

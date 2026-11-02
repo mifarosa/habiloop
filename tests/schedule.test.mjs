@@ -75,3 +75,45 @@ test("repeat presets are plain intervals: daily 1, weekly 7, every 2 weeks 14, m
   assert.equal(S.str(done(14)), "2026-11-24");
   assert.equal(S.str(done(30)), "2026-12-10");
 });
+
+// ---- what is on a given day ----
+
+const kinds = (rows) => rows.map((r) => `${r.h.name}:${r.kind}`).sort();
+
+test("jobsOn: a later day lists habits whose ideal day or final day (with tolerance) falls on it", () => {
+  const habits = [
+    habit("weekly", 7, 2, "2026-11-08"), // ideal 15 Nov, final day 17 Nov
+    habit("strict", 5, 0, "2026-11-10"), // ideal 15 Nov, no tolerance
+    habit("other", 9, 1, "2026-11-08"), // ideal 17 Nov, final day 18 Nov
+  ];
+  assert.deepEqual(kinds(S.jobsOn(habits, "2026-11-15", TODAY)), ["strict:ideal", "weekly:ideal"]);
+  assert.deepEqual(kinds(S.jobsOn(habits, "2026-11-17", TODAY)), ["other:ideal", "weekly:last"]);
+  assert.deepEqual(kinds(S.jobsOn(habits, "2026-11-18", TODAY)), ["other:last"]);
+  assert.deepEqual(S.jobsOn(habits, "2026-11-16", TODAY), [], "a day with nothing scheduled is empty");
+});
+
+test("jobsOn: with no tolerance the ideal day is also the final day, but it is listed once as the ideal day", () => {
+  const rows = S.jobsOn([habit("strict", 5, 0, "2026-11-10")], "2026-11-15", TODAY);
+  assert.deepEqual(kinds(rows), ["strict:ideal"]);
+});
+
+test("jobsOn: today lists the habits that are due now, past days list nothing", () => {
+  const habits = [
+    habit("due today", 3, 1, "2026-11-07"), // ideal today
+    habit("on the last day", 3, 1, "2026-11-06"), // final day today
+    habit("ideal passed", 4, 3, "2026-11-04"), // ideal 8 Nov, final day 11 Nov
+    habit("resting", 7, 1, "2026-11-09"),
+    habit("late", 2, 0, "2026-11-01"),
+  ];
+  assert.deepEqual(kinds(S.jobsOn(habits, TODAY, TODAY)), ["due today:ideal", "ideal passed:ideal", "on the last day:last"]);
+  assert.deepEqual(S.jobsOn(habits, "2026-11-09", TODAY), []);
+});
+
+test("jobsOn: archived habits are left out and rows are ordered by name", () => {
+  const rows = S.jobsOn([
+    habit("b", 7, 0, "2026-11-08"),
+    habit("a", 7, 0, "2026-11-08"),
+    habit("old", 7, 0, "2026-11-08", { archived: true }),
+  ], "2026-11-15", TODAY);
+  assert.deepEqual(rows.map((r) => r.h.name), ["a", "b"]);
+});

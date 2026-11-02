@@ -70,6 +70,24 @@
     });
   }
 
+  // The jobs that fall on one day. Today: the habits that are due now. Later days: habits whose ideal day is that
+  // day, or whose final day is (when there is a tolerance). Earlier days have none, the calendar shows what was
+  // logged there. Later repeats are not guessed: they depend on when the habit is actually done.
+  function jobsOn(habits, day, today) {
+    const d = num(day), t = num(today);
+    if (d < t) return [];
+    const out = [];
+    for (const h of habits) {
+      if (h.archived) continue;
+      const st = status(h, today);
+      if (d === t) {
+        if (st.state === "ideal" || st.state === "last") out.push({ h, kind: st.state });
+      } else if (st.ideal === d) out.push({ h, kind: "ideal" });
+      else if (h.grace > 0 && st.deadline === d) out.push({ h, kind: "last" });
+    }
+    return out.sort((a, b) => a.h.name.localeCompare(b.h.name));
+  }
+
   // Habit names by day for marking the calendar: each habit appears once, on its next job day.
   // Days before today (a late habit) are left out, the list says "N days overdue" for those.
   function nearestDays(habits, today) {
@@ -98,6 +116,6 @@
     return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
   }
 
-  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays };
+  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays, jobsOn };
   if (typeof module !== "undefined") module.exports = api; else root.Schedule = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

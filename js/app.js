@@ -124,13 +124,17 @@
     for (let d = 1; d <= count; d++) {
       const ds = S.str(Math.floor(first / S.DAY) + d - 1), n = state.habits.filter((h) => h.logs.includes(ds)).length;
       const jobs = dueDays.get(ds), label = jobs ? ` aria-label="${esc(`${fmt(ds)}: ${jobs.join(", ")}`)}"` : "";
-      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}${jobs ? " due" : ""}" data-act="day" data-d="${ds}"${label} ${ds > today() ? "disabled" : ""}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
+      cells += `<button class="cd${ds === calSel ? " sel" : ""}${ds === today() ? " today" : ""}${jobs ? " due" : ""}" data-act="day" data-d="${ds}"${label}>${d}<span class="dots">${"<i></i>".repeat(Math.min(n, 3))}</span></button>`;
     }
     const done = state.habits.filter((h) => h.logs.includes(calSel));
+    const plan = S.jobsOn(state.habits, calSel, today());
+    const planned = plan.length ? `<p class="lbl gap">${t("cal.plan")}</p><div class="list">${plan.map(({ h, kind }) => `<div class="entry" role="button" tabindex="0" data-act="open" data-id="${h.id}"><span>${esc(h.name)}</span><span class="muted">${t(kind === "last" ? "cal.last" : "cal.ideal")}</span></div>`).join("")}</div>` : "";
+    const logged = done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : "";
+    const none = plan.length || done.length ? "" : `<p class="muted">${t(calSel > today() ? "cal.planNone" : "cal.none")}</p>`;
     const next = up.length ? `<h3 class="sec first">${t("cal.next")}</h3><div class="list">${up.map((x) => row(x.h, x.st, x.day)).join("")}</div>` : "";
     return `${next}<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${mt}</strong><button data-act="nextm" aria-label="›">›</button></div>
       <div class="cal">${cells}</div>${dueDays.size ? `<p class="hint legend">${t("cal.legend")}</p>` : ""}<h3 class="sec">${fmt(calSel)}</h3>
-      ${done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : `<p class="muted">${t("cal.none")}</p>`}`;
+      ${planned}${logged}${none}`;
   }
 
   function renderSettings() {
