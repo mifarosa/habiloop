@@ -122,7 +122,7 @@ VAPID_PRIVATE_KEY=$Priv
 VAPID_SUBJECT=mailto:$Email
 DATA_DIR=$Server\data
 TICK_SECONDS=30
-MAX_LATE_MINUTES=30
+MAX_LATE_MINUTES=360
 "@
 [IO.File]::WriteAllText($EnvFile, $envText, (New-Object Text.UTF8Encoding($false)))
 & icacls $EnvFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null

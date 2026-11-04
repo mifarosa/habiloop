@@ -15,8 +15,8 @@ Telefon (Habiloop) ──abonelik + bildirim listesi──▶ Firestore ◀─�
 - Bir şey yapınca ya da düzenleyince uygulama listeyi günceller, yaptığın alışkanlığın bildirimi gelmez.
 - Her 30 saniyede bir listeye bakar. Dışarıdan bağlantı **kabul etmez**; yalnızca dışarı bağlanır. Alan adı, HTTPS ya da
   router ayarı gerekmez.
-- Sunucu kapalıyken ya da servis durmuşken bildirim gelmez. Servis tekrar açılınca yalnızca son 30 dakikadakileri
-  gönderir, eskileri yağdırmaz.
+- Sunucu kapalıyken ya da servis durmuşken bildirim gelmez. Servis tekrar açılınca yalnızca son 6 saat içindekileri
+  gönderir (`MAX_LATE_MINUTES`), eskileri yağdırmaz. Bilgisayar sabah geç açılırsa o günün hatırlatması yine gelir.
 
 ## Windows'ta kurulum
 

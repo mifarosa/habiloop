@@ -19,6 +19,6 @@ export function readConfig(env = process.env) {
     vapidSubject: env.VAPID_SUBJECT,
     dataDir: env.DATA_DIR || './data',
     tickSeconds: num('TICK_SECONDS', 30),
-    maxLateMinutes: num('MAX_LATE_MINUTES', 30),
+    maxLateMinutes: num('MAX_LATE_MINUTES', 360),
   };
 }
