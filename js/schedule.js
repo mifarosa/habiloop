@@ -101,7 +101,7 @@
 
   // The reminders the server should send for a habit: the ideal day, the last day (when there is
   // a tolerance) and each of the next `lateDays` days after it. Each has a local day and a stage.
-  function reminders(h, lateDays = 7) {
+  function reminders(h, lateDays = 30) {
     if (h.archived) return [];
     const st = status(h, "1970-01-01"); // only ideal/deadline are used, so the reference day is irrelevant
     const out = [{ day: str(st.ideal), stage: st.deadline === st.ideal ? "last" : "ideal", late: 0 }];

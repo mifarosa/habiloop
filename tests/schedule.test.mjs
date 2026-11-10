@@ -117,3 +117,12 @@ test("jobsOn: archived habits are left out and rows are ordered by name", () => 
   ], "2026-11-15", TODAY);
   assert.deepEqual(rows.map((r) => r.h.name), ["a", "b"]);
 });
+
+test("reminders keep coming for 30 days after the final day, so a long absence does not silence them", () => {
+  const r = S.reminders(habit("litter", 3, 1, "2026-11-01"));
+  assert.deepEqual(r.slice(0, 2).map((x) => x.stage), ["ideal", "last"]);
+  const late = r.filter((x) => x.stage === "late");
+  assert.equal(late.length, 30);
+  assert.equal(late[0].late, 1);
+  assert.equal(late[29].late, 30);
+});

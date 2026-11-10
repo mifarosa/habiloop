@@ -308,7 +308,7 @@
     return jobs;
   };
   function buildJobs() {
-    return state.habits.flatMap(pushJobsFor).sort((x, y) => x.at - y.at).slice(0, 80);
+    return state.habits.flatMap(pushJobsFor).sort((x, y) => x.at - y.at).slice(0, 240);
   }
   // Called after any change (and when the app is opened): keeps the server's list current.
   function publishPush() {
