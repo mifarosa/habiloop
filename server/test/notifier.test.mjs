@@ -111,3 +111,13 @@ test('forgets old sent entries', async () => {
   await n.tick();
   assert.deepEqual(Object.keys(state.saved), ['x|new']);
 });
+
+test('a daily digest with several lines is delivered whole (not cut at 200 characters)', async () => {
+  const { n, state } = setup();
+  const body = Array.from({ length: 6 }, (_, i) => `Alışkanlık numara ${i + 1} · 12 gün gecikti`).join('\n');
+  assert.ok(body.length > 200);
+  n.setSub('s1', sub([job('day|2026-10-17', T0 - 60000, { title: '6 iş seni bekliyor', body, id: undefined, act: undefined, tag: 'habiloop-day-2026-10-17' })]));
+  assert.equal((await n.tick()).sent, 1);
+  assert.equal(state.sends[0].payload.body, body);
+  assert.equal((await n.tick()).sent, 0, 'the day is sent once');
+});

@@ -86,7 +86,7 @@ export function createNotifier({
           const key = `${sub.id}|${job.key}`;
           if (sent[key]) continue;
           const ok = await sendOne(sub, {
-            title: str(job.title, 120), body: str(job.body, 200), tag: str(job.tag, 80) || 'habiloop',
+            title: str(job.title, 120), body: str(job.body, 600), tag: str(job.tag, 80) || 'habiloop',
             id: str(job.id, 80), act: str(job.act, 30),
           });
           // Not marked when it was not delivered, so the next tick tries again (until it is too late).

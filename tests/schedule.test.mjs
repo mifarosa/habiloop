@@ -126,3 +126,19 @@ test("reminders keep coming for 30 days after the final day, so a long absence d
   assert.equal(late[0].late, 1);
   assert.equal(late[29].late, 30);
 });
+
+test("byDay: one entry per day at its earliest time, items by time then name", () => {
+  const at = (d, h) => S.at(d, h);
+  const days = S.byDay([
+    { day: "2026-11-11", at: at("2026-11-11", "18:00"), name: "Su", id: "a" },
+    { day: "2026-11-11", at: at("2026-11-11", "09:00"), name: "Kedi", id: "b" },
+    { day: "2026-11-11", at: at("2026-11-11", "09:00"), name: "Bitki", id: "c" },
+    { day: "2026-11-12", at: at("2026-11-12", "09:00"), name: "Su", id: "a" },
+  ]);
+  assert.equal(days.length, 2);
+  assert.equal(days[0].day, "2026-11-11");
+  assert.equal(days[0].at, at("2026-11-11", "09:00"));
+  assert.deepEqual(days[0].items.map((x) => x.name), ["Bitki", "Kedi", "Su"]);
+  assert.equal(days[1].items.length, 1);
+  assert.deepEqual(S.byDay([]), []);
+});

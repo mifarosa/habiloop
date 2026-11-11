@@ -48,7 +48,7 @@ The habits are encrypted with a random data key; the sync password only locks th
 ## Server notifications (optional)
 A small Node service in `server/` runs on an always-on machine and sends the reminders as Web Push. Habit data stays
 encrypted: the app prepares a list of "send this at that time" reminders per device and the service only sends them.
-Setup is one command, see [`server/README.md`](server/README.md). Then paste the server's public key into `js/push-config.js`.
+Everything due on a day comes as **one notification** (a count in the title, one line per habit; a lone habit keeps its own text and the Done button), sent at the day's earliest reminder time. Setup is one command, see [`server/README.md`](server/README.md). Then paste the server's public key into `js/push-config.js`.
 
 ## Files
 | File | Purpose |

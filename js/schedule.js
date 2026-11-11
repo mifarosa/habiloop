@@ -110,12 +110,26 @@
     return out;
   }
 
+  // Groups reminders ({ day, at, name, ... }) into one entry per local day, due at that day's earliest time,
+  // so the phone gets a single notification per day. Inside a day: by time, then by name.
+  function byDay(items) {
+    const days = new Map();
+    for (const it of items) {
+      const g = days.get(it.day) || { day: it.day, at: it.at, items: [] };
+      g.at = Math.min(g.at, it.at);
+      g.items.push(it);
+      days.set(it.day, g);
+    }
+    for (const g of days.values()) g.items.sort((a, b) => a.at - b.at || String(a.name).localeCompare(String(b.name)));
+    return [...days.values()].sort((a, b) => a.at - b.at);
+  }
+
   // Local wall-clock timestamp (ms) for a day and "HH:MM", in the device's own time zone.
   function at(day, time) {
     const [y, m, d] = day.split("-").map(Number), [hh, mm] = time.split(":").map(Number);
     return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
   }
 
-  const api = { reminders, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays, jobsOn };
+  const api = { reminders, byDay, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays, jobsOn };
   if (typeof module !== "undefined") module.exports = api; else root.Schedule = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

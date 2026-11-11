@@ -114,7 +114,7 @@ düzenle, sonra `sudo systemctl enable --now habiloop-notifier`. Docker için `s
 | Anahtar hiç görünmüyor | `js/push-config.js`'te PUBLIC anahtar yazılı mı, Google ile giriş yaptın mı? İkisi de gerekli. |
 | "Bildirim izni verilmedi" | iPhone: Ayarlar → Bildirimler → Habiloop. Android: Ayarlar → Uygulamalar → Chrome/Habiloop → Bildirimler. |
 | Saatinde değil, geç geliyor | Telefonun Odak / Rahatsız Etme modu ya da pil tasarrufu bildirimleri erteler. Sunucu saatinin doğru olduğundan emin ol (`timedatectl`). |
-| Bir alışkanlık için gelmedi | Alışkanlığı yapıp işaretledin mi, arşivde mi? Hatırlatma saati alışkanlığın kendi saati, yoksa Ayarlar'daki varsayılan saattir. |
+| Bir alışkanlık için gelmedi | Alışkanlığı yapıp işaretledin mi, arşivde mi? O günün tüm işleri tek bildirimde gelir; bildirim, o günün en erken hatırlatma saatinde (alışkanlığın kendi saati, yoksa Ayarlar'daki varsayılan saat) gönderilir. |
 | Çift bildirim | Normal değil. Sunucu bildirimi açıkken uygulama kendi bildirimini göndermez. |
 
 ## Güvenlik ve gizlilik
