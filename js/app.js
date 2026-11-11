@@ -295,20 +295,32 @@
 
   // ---- server push: the list of reminders this device hands to the home server ----
   let pushOn = false, pushTimer = null;
-  const pushJobsFor = (h) => {
-    const time = h.time || defTime(), now = Date.now(), jobs = [];
+  // One reminder per habit and day...
+  const pushItemsFor = (h) => {
+    const time = h.time || defTime(), now = Date.now(), items = [];
     for (const r of S.reminders(h)) {
       const when = S.at(r.day, time);
       if (when < now - 45 * 60000) continue; // the server drops anything later than that anyway
-      jobs.push({
-        key: `${h.id}|${r.day}|${r.stage}`, at: when, id: h.id, name: h.name, tag: "habiloop-" + h.id, act: t("notif.done"),
-        title: h.name, body: r.stage === "late" ? t("st.late", { n: r.late }) : t(r.stage === "last" ? "st.last" : "st.ideal"),
-      });
+      items.push({ day: r.day, at: when, id: h.id, name: h.name, stage: r.stage, late: r.late });
     }
-    return jobs;
+    return items;
   };
+  const stateText = (it) => (it.stage === "late" ? t("st.late", { n: it.late }) : t(it.stage === "last" ? "st.last" : "st.ideal"));
+  const DIGEST_LINES = 6;
+  // ...handed to the server as one notification per day: a lone habit keeps its own text (and the "Done"
+  // button), several share a count in the title and one "name · state" line each.
+  function pushJobForDay(g) {
+    const key = `day|${g.day}`, tag = `habiloop-day-${g.day}`;
+    if (g.items.length === 1) {
+      const it = g.items[0];
+      return { key, at: g.at, id: it.id, tag, act: t("notif.done"), title: it.name, body: stateText(it) };
+    }
+    const lines = g.items.slice(0, DIGEST_LINES).map((it) => `${it.name} · ${stateText(it)}`);
+    if (g.items.length > DIGEST_LINES) lines.push(t("notif.more", { n: g.items.length - DIGEST_LINES }));
+    return { key, at: g.at, tag, title: t("notif.group", { n: g.items.length }), body: lines.join("\n") };
+  }
   function buildJobs() {
-    return state.habits.flatMap(pushJobsFor).sort((x, y) => x.at - y.at).slice(0, 240);
+    return S.byDay(state.habits.flatMap(pushItemsFor)).map(pushJobForDay).slice(0, 240);
   }
   // Called after any change (and when the app is opened): keeps the server's list current.
   function publishPush() {
