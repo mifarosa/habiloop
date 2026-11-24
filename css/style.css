@@ -96,3 +96,9 @@ small,.hint{font-size:12px;color:var(--muted);margin:0}
 .linkbtn.more{display:block;margin:10px auto 0;padding:8px 12px}
 .chk{display:flex;gap:12px;align-items:flex-start;margin:4px 0 10px}.chk input{width:22px;height:22px;margin:2px 0 0;flex:none;accent-color:var(--accent)}.chk small{display:block;color:var(--muted);font-size:13px;font-weight:400;margin-top:2px}
 input:disabled{opacity:.45}
+.emo{margin-bottom:6px}.emo input{width:5.5em;text-align:center;font-size:20px}.emo .chips{margin-top:2px}.emo .chip-btn{font-size:18px;padding:4px 10px}
+#note-text{width:100%;box-sizing:border-box;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);resize:vertical;margin-bottom:10px}
+.rnote{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.row .txt{min-width:0}
+.dnote{margin:0 0 12px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px}.dnote p{margin:0 0 4px;white-space:pre-wrap;overflow-wrap:anywhere}.dnote small{display:block;color:var(--muted);margin-bottom:4px}
+.enote{display:block;color:var(--muted);font-size:13px;font-weight:400;overflow-wrap:anywhere}.entry .acts{display:flex;gap:14px;flex:none}
+.ring text.emo-t{font-size:20px;font-weight:400}.dhead .ring text.emo-t{font-size:36px}

@@ -17,6 +17,8 @@ Example: litter box, every 3 days, 1 day tolerance. Clean it on Wednesday:
 - The calendar flags the days a job is due in the month grid. Tap any day, also a future one, to see what is scheduled then (ideal day or last day), or what was logged.
 - "It's time" prompt once a day after the reminder time; optional browser notifications while the app is open or in the background.
 - **Keep it relaxed** (per habit, ticked by default for daily): a late habit never turns red and gets no "overdue" reminders; it stays due, shows "Last: N days ago" and is listed in the day's notification. Good for things like reading; leave it unticked to build a habit (late turns red and is reminded).
+- **Green on the day it is due**, with a smile in the ring, or an emoji you pick for the habit (yellow only once it slips past that day).
+- **Notes** per habit and day (200 characters), from the detail sheet or the calendar. A note can be **carried to the next time**: it keeps showing on every later day until you change or turn it off, and is stored once, not copied. Notes and emoji sync encrypted with the habit and are part of the JSON backup.
 - On-time rate (share of cycles done by the last day) instead of a streak.
 - Interval suggestion after 5+ entries when your real rhythm differs.
 - Calendar with a log per day, history editing, JSON backup and restore.
