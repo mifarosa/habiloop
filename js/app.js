@@ -17,7 +17,7 @@
   }
 
   // What sync compares: the habit's own fields (not the local "asked today" flags).
-  const pack = (h) => ({ name: h.name, every: h.every, grace: h.grace, time: h.time || null, start: h.start, created: h.created, logs: h.logs, archived: !!h.archived, dismissed: h.dismissed ?? null });
+  const pack = (h) => ({ name: h.name, every: h.every, grace: h.grace, time: h.time || null, start: h.start, created: h.created, logs: h.logs, archived: !!h.archived, dismissed: h.dismissed ?? null, soft: !!h.soft });
   const sigs = {};
   const syncListeners = [];
   state.habits.forEach((h) => { if (!h.updatedAt) h.updatedAt = Date.now(); sigs[h.id] = JSON.stringify(pack(h)); });
@@ -42,7 +42,7 @@
     return {
       id: String(d.id), updatedAt: d.updatedAt || Date.now(), name: d.name.slice(0, 60), every: Math.max(1, +d.every || 1), grace: Math.max(0, +d.grace || 0),
       time: /^\d\d:\d\d$/.test(d.time) ? d.time : null, created: dateOk(d.created) ? d.created : Schedule.todayStr(), start: dateOk(d.start) ? d.start : Schedule.todayStr(),
-      archived: !!d.archived, dismissed: d.dismissed ?? null, logs: Array.isArray(d.logs) ? d.logs.filter(dateOk).sort() : [],
+      archived: !!d.archived, dismissed: d.dismissed ?? null, soft: !!d.soft, logs: Array.isArray(d.logs) ? d.logs.filter(dateOk).sort() : [],
       askedOn: L ? L.askedOn : null, notifiedOn: L ? L.notifiedOn : null,
     };
   }
@@ -77,6 +77,7 @@
   // ---- pieces ----
   function statusText(st) {
     if (st.state === "ok") return st.toIdeal === 1 ? t("st.ok1") : t("st.ok", { n: st.toIdeal });
+    if (st.state === "ideal" && st.soft && st.toIdeal < 0 && st.sinceLast !== null) return t("st.since", { n: st.sinceLast });
     if (st.state === "ideal") return st.toIdeal === 0 ? t("st.ideal") : t("st.idealPast", { n: -st.toIdeal });
     if (st.state === "last") return t("st.last");
     return t("st.late", { n: -st.toDeadline });
@@ -193,9 +194,9 @@
       <div class="dhead">${ring(st)}<div><h2>${esc(h.name)}</h2><div class="dstate">${statusText(st)}</div><small>${rule(h)}${h.time ? " · " + h.time : ""}</small></div></div>
       <div class="facts">
         <div class="fact"><b>${h.logs.length ? fmt(h.logs[h.logs.length - 1]) : t("never")}</b><span>${t("f.last")}</span></div>
-        <div class="fact"><b>${rate ? Math.round(rate.rate * 100) + "% (" + rate.ok + "/" + rate.cycles + ")" : t("rateNone")}</b><span>${t("f.rate")}</span></div>
+        ${h.soft ? "" : `<div class="fact"><b>${rate ? Math.round(rate.rate * 100) + "% (" + rate.ok + "/" + rate.cycles + ")" : t("rateNone")}</b><span>${t("f.rate")}</span></div>`}
         <div class="fact"><b>${fmt(S.str(st.ideal))}</b><span>${t("f.next")}</span></div>
-        <div class="fact"><b>${fmt(S.str(st.deadline))}</b><span>${t("f.final")}</span></div></div>
+        ${h.soft ? "" : `<div class="fact"><b>${fmt(S.str(st.deadline))}</b><span>${t("f.final")}</span></div>`}</div>
       ${sug ? `<div class="suggest"><span>${t("suggest", { n: sug })}</span><div class="btnrow"><button class="btn solid" data-act="accept" data-id="${h.id}" data-n="${sug}">${t("change")}</button><button class="btn" data-act="dismiss" data-id="${h.id}" data-n="${sug}">${t("dismiss")}</button></div></div>` : ""}
       <div class="btnrow"><button class="btn solid" data-act="done" data-id="${h.id}">${t("done")}</button><button class="btn" data-act="other" data-id="${h.id}">${t("other")}</button></div>
       <div class="foot"><button class="btn danger" data-act="del" data-id="${h.id}">${t("delete")}</button><span>
@@ -236,9 +237,14 @@
   }
 
   // ---- editor ----
+  // The "relaxed" box follows the repeat (ticked for daily) until the person has touched it themselves.
+  let softTouched = false;
   function updateHint() {
     const n = Math.max(1, parseInt($("#f-every").value) || 1), g = Math.max(0, parseInt($("#f-grace").value) || 0);
-    $("#f-hint").textContent = g ? t("hint", { n, g }) : t("hint0", { n });
+    if (!softTouched) $("#f-soft").checked = n === 1;
+    const soft = $("#f-soft").checked;
+    $("#f-grace").disabled = soft;
+    $("#f-hint").textContent = soft ? t("hintSoft", { n }) : g ? t("hint", { n, g }) : t("hint0", { n });
     document.querySelectorAll("#f-presets [data-preset]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.preset === n)));
   }
   function openForm(id) {
@@ -248,6 +254,7 @@
     $("#f-name").value = h ? h.name : "";
     $("#f-every").value = h ? h.every : 3; $("#f-grace").value = h ? h.grace : 1;
     $("#f-time").value = h ? h.time || "" : defTime();
+    softTouched = !!h; $("#f-soft").checked = h ? !!h.soft : false;
     $("#f-last").value = ""; $("#f-last").max = today();
     $("#f-last-wrap").hidden = !!h; $("#f-history-wrap").hidden = !h;
     const hist = $("#f-history"); hist.replaceChildren();
@@ -264,6 +271,7 @@
     $("#form-dialog").showModal();
   }
   $("#f-every").oninput = $("#f-grace").oninput = updateHint;
+  $("#f-soft").onchange = () => { softTouched = true; updateHint(); };
   // The repeat buttons only fill in the interval; the number field stays the single source of truth.
   $("#f-presets").onclick = (e) => {
     const b = e.target.closest("[data-preset]");
@@ -273,7 +281,7 @@
   };
   $("#form").onsubmit = () => {
     const name = $("#f-name").value.trim(); if (!name) return;
-    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null };
+    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: $("#f-soft").checked ? 0 : Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null, soft: $("#f-soft").checked };
     const h = find(editingId);
     if (h) { if (data.every !== h.every) h.dismissed = null; Object.assign(h, data); }
     else {
@@ -301,11 +309,13 @@
     for (const r of S.reminders(h)) {
       const when = S.at(r.day, time);
       if (when < now - 45 * 60000) continue; // the server drops anything later than that anyway
-      items.push({ day: r.day, at: when, id: h.id, name: h.name, stage: r.stage, late: r.late });
+      // A relaxed habit that is past its ideal day says how long ago it was last done instead of "overdue".
+      const since = h.soft && h.logs.length ? S.num(r.day) - S.num(h.logs[h.logs.length - 1]) : null;
+      items.push({ day: r.day, at: when, id: h.id, name: h.name, stage: r.stage, late: r.late, since: since > h.every ? since : null });
     }
     return items;
   };
-  const stateText = (it) => (it.stage === "late" ? t("st.late", { n: it.late }) : t(it.stage === "last" ? "st.last" : "st.ideal"));
+  const stateText = (it) => (it.since ? t("st.since", { n: it.since }) : it.stage === "late" ? t("st.late", { n: it.late }) : t(it.stage === "last" ? "st.last" : "st.ideal"));
   const DIGEST_LINES = 6;
   // ...handed to the server as one notification per day: a lone habit keeps its own text (and the "Done"
   // button), several share a count in the title and one "name · state" line each.

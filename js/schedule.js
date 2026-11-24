@@ -9,20 +9,24 @@
   const todayStr = (now = new Date()) => `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
   // state: ok (green) | ideal (yellow) | last (red, final day) | late (overdue)
+  // A relaxed habit (`soft`) never becomes late or red: once its ideal day has come it stays "ideal" until
+  // it is done, and `sinceLast` says how many days ago it was last done (null when it never was).
   function status(h, today) {
     const t = typeof today === "string" ? num(today) : today;
-    const ideal = h.logs.length ? num(h.logs[h.logs.length - 1]) + h.every : num(h.start);
-    const deadline = ideal + h.grace;
+    const soft = !!h.soft, last = h.logs.length ? num(h.logs[h.logs.length - 1]) : null;
+    const ideal = last !== null ? last + h.every : num(h.start);
+    const deadline = soft ? ideal : ideal + h.grace;
     let state = "ok";
-    if (t > deadline) state = "late";
-    else if (t >= ideal) state = h.grace > 0 && t === deadline ? "last" : "ideal";
+    if (!soft && t > deadline) state = "late";
+    else if (t >= ideal) state = !soft && h.grace > 0 && t === deadline ? "last" : "ideal";
     // frac: how far through the window we are, 0 at the last log, 1 on the final day.
     const from = ideal - h.every, frac = Math.min(1, Math.max(0, (t - from) / (deadline - from)));
-    return { ideal, deadline, state, frac, toIdeal: ideal - t, toDeadline: deadline - t };
+    return { ideal, deadline, state, frac, toIdeal: ideal - t, toDeadline: deadline - t, soft, sinceLast: last !== null ? t - last : null };
   }
 
   // Share of cycles done on or before the final day.
   function onTime(h) {
+    if (h.soft) return null; // there is no deadline to be on time for
     const cycles = h.logs.length - 1;
     if (cycles < 1) return null;
     let ok = 0;
@@ -83,7 +87,7 @@
       if (d === t) {
         if (st.state === "ideal" || st.state === "last") out.push({ h, kind: st.state });
       } else if (st.ideal === d) out.push({ h, kind: "ideal" });
-      else if (h.grace > 0 && st.deadline === d) out.push({ h, kind: "last" });
+      else if (!h.soft && h.grace > 0 && st.deadline === d) out.push({ h, kind: "last" });
     }
     return out.sort((a, b) => a.h.name.localeCompare(b.h.name));
   }
@@ -104,9 +108,10 @@
   function reminders(h, lateDays = 30) {
     if (h.archived) return [];
     const st = status(h, "1970-01-01"); // only ideal/deadline are used, so the reference day is irrelevant
-    const out = [{ day: str(st.ideal), stage: st.deadline === st.ideal ? "last" : "ideal", late: 0 }];
+    // A relaxed habit has no "last" or "late" days: it is simply due again every day until it is done.
+    const out = [{ day: str(st.ideal), stage: !h.soft && st.deadline === st.ideal ? "last" : "ideal", late: 0 }];
     if (st.deadline > st.ideal) out.push({ day: str(st.deadline), stage: "last", late: 0 });
-    for (let i = 1; i <= lateDays; i++) out.push({ day: str(st.deadline + i), stage: "late", late: i });
+    for (let i = 1; i <= lateDays; i++) out.push({ day: str(st.deadline + i), stage: h.soft ? "ideal" : "late", late: h.soft ? 0 : i });
     return out;
   }
 
