@@ -23,7 +23,7 @@ h3.sec{font:italic 600 15px var(--serif);color:var(--muted);margin:22px 0 4px}
 .list{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden}
 .row{display:flex;align-items:center;gap:14px;padding:12px 14px;border-bottom:1px solid var(--line);width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;color:inherit;font:inherit;cursor:pointer}
 .list>.row:last-child{border-bottom:0}
-.row.s-ok{--st:var(--ok)}.row.s-ideal{--st:var(--ideal)}.row.s-last{--st:var(--last)}.row.s-late{--st:var(--late)}
+.s-ok{--st:var(--ok)}.s-ideal{--st:var(--ideal)}.s-last{--st:var(--last)}.s-late{--st:var(--late)}
 .ring{flex:none;width:46px;height:46px}
 .ring circle{fill:none;stroke-width:4}.ring .tr{stroke:var(--line)}.ring .pr{stroke:var(--st);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%}
 .ring text{font:700 13px system-ui;fill:var(--ink);text-anchor:middle;dominant-baseline:central}
@@ -101,4 +101,5 @@ input:disabled{opacity:.45}
 .rnote{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.row .txt{min-width:0}
 .dnote{margin:0 0 12px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px}.dnote p{margin:0 0 4px;white-space:pre-wrap;overflow-wrap:anywhere}.dnote small{display:block;color:var(--muted);margin-bottom:4px}
 .enote{display:block;color:var(--muted);font-size:13px;font-weight:400;overflow-wrap:anywhere}.entry .acts{display:flex;gap:14px;flex:none}
-.ring text.emo-t{font-size:20px;font-weight:400}.dhead .ring text.emo-t{font-size:36px}
+/* SVG font sizes are in viewBox units (48 wide), so one size fits both the list and the big detail ring. */
+.ring text.emo-t,.dhead .ring text.emo-t{font-size:18px;font-weight:400}
