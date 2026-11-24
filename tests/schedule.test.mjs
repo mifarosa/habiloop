@@ -142,3 +142,18 @@ test("byDay: one entry per day at its earliest time, items by time then name", (
   assert.equal(days[1].items.length, 1);
   assert.deepEqual(S.byDay([]), []);
 });
+
+test("relaxed habit: never late or red, says how long ago it was done, due every day until done", () => {
+  const h = habit("Kitap", 1, 0, "2026-11-05", { soft: true });
+  const st = S.status(h, TODAY); // five days after the last log
+  assert.equal(st.state, "ideal");
+  assert.equal(st.sinceLast, 5);
+  assert.equal(st.soft, true);
+  assert.equal(S.status(habit("Kitap", 1, 0, "2026-11-05"), TODAY).state, "late", "the strict habit is late as before");
+  assert.equal(S.status(habit("Kitap", 1, 0, TODAY, { soft: true }), TODAY).state, "ok");
+  assert.equal(S.onTime(habit("Kitap", 1, 0, "2026-11-05", { soft: true, logs: ["2026-11-01", "2026-11-05"] })), null);
+  const r = S.reminders(h);
+  assert.ok(r.every((x) => x.stage === "ideal" && x.late === 0), "no last or late reminders");
+  assert.equal(r.length, 31);
+  assert.equal(S.jobsOn([h], TODAY, TODAY).length, 1);
+});
