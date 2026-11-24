@@ -17,7 +17,7 @@
   }
 
   // What sync compares: the habit's own fields (not the local "asked today" flags).
-  const pack = (h) => ({ name: h.name, every: h.every, grace: h.grace, time: h.time || null, start: h.start, created: h.created, logs: h.logs, archived: !!h.archived, dismissed: h.dismissed ?? null, soft: !!h.soft });
+  const pack = (h) => ({ name: h.name, every: h.every, grace: h.grace, time: h.time || null, start: h.start, created: h.created, logs: h.logs, archived: !!h.archived, dismissed: h.dismissed ?? null, soft: !!h.soft, emoji: h.emoji || "", notes: h.notes || null });
   const sigs = {};
   const syncListeners = [];
   state.habits.forEach((h) => { if (!h.updatedAt) h.updatedAt = Date.now(); sigs[h.id] = JSON.stringify(pack(h)); });
@@ -37,12 +37,28 @@
     if (changed.length) { syncListeners.forEach((fn) => fn(changed)); publishPush(); }
   }
   const dateOk = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
+  const dateOkApp = dateOk;
+  // First emoji (grapheme) of what was typed; the ring has room for one.
+  function oneEmoji(x) {
+    const v = String(x || "").trim();
+    if (!v) return "";
+    try { return [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(v)][0].segment.slice(0, 16); } catch (_) { return Array.from(v)[0] || ""; }
+  }
+  function cleanNotes(n) {
+    const out = {};
+    if (n && typeof n === "object") for (const k of Object.keys(n).sort().slice(-80)) {
+      const v = n[k];
+      if (dateOk(k) && v && typeof v.t === "string") out[k] = { t: v.t.slice(0, Schedule.NOTE_MAX), c: !!v.c };
+    }
+    return Object.keys(out).length ? out : null;
+  }
   function normalize(d, L) {
     if (!d || typeof d.name !== "string") return null;
+    const notes = cleanNotes(d.notes);
     return {
       id: String(d.id), updatedAt: d.updatedAt || Date.now(), name: d.name.slice(0, 60), every: Math.max(1, +d.every || 1), grace: Math.max(0, +d.grace || 0),
       time: /^\d\d:\d\d$/.test(d.time) ? d.time : null, created: dateOk(d.created) ? d.created : Schedule.todayStr(), start: dateOk(d.start) ? d.start : Schedule.todayStr(),
-      archived: !!d.archived, dismissed: d.dismissed ?? null, soft: !!d.soft, logs: Array.isArray(d.logs) ? d.logs.filter(dateOk).sort() : [],
+      archived: !!d.archived, dismissed: d.dismissed ?? null, soft: !!d.soft, emoji: oneEmoji(d.emoji), ...(notes ? { notes } : {}), logs: Array.isArray(d.logs) ? d.logs.filter(dateOk).sort() : [],
       askedOn: L ? L.askedOn : null, notifiedOn: L ? L.notifiedOn : null,
     };
   }
@@ -82,8 +98,15 @@
     if (st.state === "last") return t("st.last");
     return t("st.late", { n: -st.toDeadline });
   }
-  function ring(st) {
+  // The day a habit is due is a good day, not a warning: green, with the habit's emoji (or a smile).
+  // Yellow starts once it slips past that day.
+  const dueToday = (st) => st.state === "ideal" && st.toIdeal === 0;
+  const tone = (st) => (dueToday(st) ? "ok" : st.state);
+  function ring(st, h) {
     const C = 2 * Math.PI * 20, len = Math.max(0.04, st.frac) * C;
+    if (dueToday(st)) {
+      return `<svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="tr" cx="24" cy="24" r="20"/><circle class="pr" cx="24" cy="24" r="20" stroke-dasharray="${C} ${C}"/><text class="emo-t" x="24" y="25">${esc((h && h.emoji) || "🙂")}</text></svg>`;
+    }
     const label = st.state === "ok" ? st.toIdeal : st.state === "late" ? "+" + -st.toDeadline : "!";
     return `<svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="tr" cx="24" cy="24" r="20"/><circle class="pr" cx="24" cy="24" r="20" stroke-dasharray="${len} ${C}"/><text x="24" y="25">${label}</text></svg>`;
   }
@@ -93,9 +116,10 @@
 
   function row(h, st, day) {
     const due = st.state !== "ok";
-    return `<div class="row s-${st.state}" role="button" tabindex="0" data-act="open" data-id="${h.id}">
-      ${ring(st)}
-      <div class="txt"><b>${esc(h.name)}</b><span>${statusText(st)}${day && day !== today() ? ` · ${fmt(day)}` : ""}</span>${S.suggest(h) ? ` <span class="m">· ${t("hasSuggest")}</span>` : ""}</div>
+    const note = S.noteFor(h, today());
+    return `<div class="row s-${tone(st)}" role="button" tabindex="0" data-act="open" data-id="${h.id}">
+      ${ring(st, h)}
+      <div class="txt"><b>${esc(h.name)}</b><span>${statusText(st)}${day && day !== today() ? ` · ${fmt(day)}` : ""}</span>${S.suggest(h) ? ` <span class="m">· ${t("hasSuggest")}</span>` : ""}${note ? `<span class="rnote">${esc(note.t)}</span>` : ""}</div>
       ${due ? `<button class="go" data-act="done" data-id="${h.id}">${t("done")}</button>` : ""}</div>`;
   }
 
@@ -137,7 +161,7 @@
     const done = state.habits.filter((h) => h.logs.includes(calSel));
     const plan = S.jobsOn(state.habits, calSel, today());
     const planned = plan.length ? `<p class="lbl gap">${t("cal.plan")}</p><div class="list">${plan.map(({ h, kind }) => `<div class="entry" role="button" tabindex="0" data-act="open" data-id="${h.id}"><span>${esc(h.name)}</span><span class="muted">${t(kind === "last" ? "cal.last" : "cal.ideal")}</span></div>`).join("")}</div>` : "";
-    const logged = done.length ? `<div class="list">${done.map((h) => `<div class="entry"><span>${esc(h.name)}</span><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></div>`).join("")}</div>` : "";
+    const logged = done.length ? `<div class="list">${done.map((h) => { const n = S.noteFor(h, calSel); return `<div class="entry"><span>${esc(h.name)}${n ? `<small class="enote">${esc(n.t)}</small>` : ""}</span><span class="acts"><button class="linkbtn" data-act="note" data-id="${h.id}" data-d="${calSel}">${t(n ? "note.edit" : "note.add")}</button><button class="linkbtn danger" data-act="unlog" data-id="${h.id}" data-d="${calSel}">${t("cal.remove")}</button></span></div>`; }).join("")}</div>` : "";
     const none = plan.length || done.length ? "" : `<p class="muted">${t(calSel > today() ? "cal.planNone" : "cal.none")}</p>`;
     return `<div class="calnav"><button data-act="prevm" aria-label="‹">‹</button><strong>${mt}</strong><button data-act="nextm" aria-label="›">›</button></div>
       <div class="cal">${cells}</div>${dueDays.size ? `<p class="hint legend">${t("cal.legend")}</p>` : ""}<h3 class="sec">${fmt(calSel)}</h3>
@@ -190,14 +214,17 @@
     const h = find(detailId);
     if (!h) { $("#detail-dialog").close(); return; }
     const st = S.status(h, today()), rate = S.onTime(h), sug = S.suggest(h);
-    $("#detail").innerHTML = `<div class="s-${st.state}">
-      <div class="dhead">${ring(st)}<div><h2>${esc(h.name)}</h2><div class="dstate">${statusText(st)}</div><small>${rule(h)}${h.time ? " · " + h.time : ""}</small></div></div>
+    const note = S.noteFor(h, today());
+    const noteHtml = `<div class="dnote">${note ? `<p>${esc(note.t)}</p>${note.c ? `<small>${note.own ? t("note.carrying") : t("note.carriedFrom", { d: fmt(note.from) })}</small>` : ""}` : ""}<button class="linkbtn" data-act="note" data-id="${h.id}" data-d="${today()}">${t(note ? "note.edit" : "note.add")}</button></div>`;
+    $("#detail").innerHTML = `<div class="s-${tone(st)}">
+      <div class="dhead">${ring(st, h)}<div><h2>${esc(h.name)}</h2><div class="dstate">${statusText(st)}</div><small>${rule(h)}${h.time ? " · " + h.time : ""}</small></div></div>
       <div class="facts">
         <div class="fact"><b>${h.logs.length ? fmt(h.logs[h.logs.length - 1]) : t("never")}</b><span>${t("f.last")}</span></div>
         ${h.soft ? "" : `<div class="fact"><b>${rate ? Math.round(rate.rate * 100) + "% (" + rate.ok + "/" + rate.cycles + ")" : t("rateNone")}</b><span>${t("f.rate")}</span></div>`}
         <div class="fact"><b>${fmt(S.str(st.ideal))}</b><span>${t("f.next")}</span></div>
         ${h.soft ? "" : `<div class="fact"><b>${fmt(S.str(st.deadline))}</b><span>${t("f.final")}</span></div>`}</div>
       ${sug ? `<div class="suggest"><span>${t("suggest", { n: sug })}</span><div class="btnrow"><button class="btn solid" data-act="accept" data-id="${h.id}" data-n="${sug}">${t("change")}</button><button class="btn" data-act="dismiss" data-id="${h.id}" data-n="${sug}">${t("dismiss")}</button></div></div>` : ""}
+      ${noteHtml}
       <div class="btnrow"><button class="btn solid" data-act="done" data-id="${h.id}">${t("done")}</button><button class="btn" data-act="other" data-id="${h.id}">${t("other")}</button></div>
       <div class="foot"><button class="btn danger" data-act="del" data-id="${h.id}">${t("delete")}</button><span>
         <button class="btn quiet" data-act="edit" data-id="${h.id}">${t("edit")}</button><button class="btn quiet" data-close>${t("close")}</button></span></div></div>`;
@@ -236,6 +263,26 @@
     $("#other-dialog").showModal();
   }
 
+  // ---- notes ----
+  let noteTarget = null;
+  function openNote(id, day) {
+    const h = find(id); if (!h || !dateOkApp(day)) return;
+    const n = S.noteFor(h, day);
+    noteTarget = { id, day };
+    $("#note-title").textContent = h.name;
+    $("#note-day").textContent = fmt(day);
+    $("#note-text").value = n ? n.t : "";
+    $("#note-carry").checked = n ? n.c : false;
+    $("#note-dialog").showModal();
+    $("#note-text").focus();
+  }
+  $("#note-form").onsubmit = () => {
+    const h = noteTarget && find(noteTarget.id); if (!h) return;
+    S.setNote(h, noteTarget.day, $("#note-text").value, $("#note-carry").checked);
+    save(); render();
+    if ($("#detail-dialog").open) renderDetail();
+  };
+
   // ---- editor ----
   // The "relaxed" box follows the repeat (ticked for daily) until the person has touched it themselves.
   let softTouched = false;
@@ -254,6 +301,7 @@
     $("#f-name").value = h ? h.name : "";
     $("#f-every").value = h ? h.every : 3; $("#f-grace").value = h ? h.grace : 1;
     $("#f-time").value = h ? h.time || "" : defTime();
+    $("#f-emoji").value = h ? h.emoji || "" : "";
     softTouched = !!h; $("#f-soft").checked = h ? !!h.soft : false;
     $("#f-last").value = ""; $("#f-last").max = today();
     $("#f-last-wrap").hidden = !!h; $("#f-history-wrap").hidden = !h;
@@ -270,6 +318,11 @@
     updateHint();
     $("#form-dialog").showModal();
   }
+  $("#f-emojis").replaceChildren(...["📚", "💧", "🏃", "🧘", "🍎", "😴", "🦷", "✍️", "🧹", "🌱", "💊", "🐱"].map((e) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip-btn"; b.textContent = e;
+    b.onclick = () => { $("#f-emoji").value = e; };
+    return b;
+  }));
   $("#f-every").oninput = $("#f-grace").oninput = updateHint;
   $("#f-soft").onchange = () => { softTouched = true; updateHint(); };
   // The repeat buttons only fill in the interval; the number field stays the single source of truth.
@@ -281,7 +334,7 @@
   };
   $("#form").onsubmit = () => {
     const name = $("#f-name").value.trim(); if (!name) return;
-    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: $("#f-soft").checked ? 0 : Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null, soft: $("#f-soft").checked };
+    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: $("#f-soft").checked ? 0 : Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null, soft: $("#f-soft").checked, emoji: oneEmoji($("#f-emoji").value) };
     const h = find(editingId);
     if (h) { if (data.every !== h.every) h.dismissed = null; Object.assign(h, data); }
     else {
@@ -506,6 +559,7 @@
     else if (act === "dismiss") { h.dismissed = +n; save(); render(); }
     else if (act === "day") { calSel = d; render(); }
     else if (act === "soonmore") { soonAll = !soonAll; render(); }
+    else if (act === "note") openNote(id, d);
     else if (act === "unlog") { h.logs = h.logs.filter((x) => x !== d); save(); render(); }
     else if (act === "prevm") { calMonth = calMonth.m ? { y: calMonth.y, m: calMonth.m - 1 } : { y: calMonth.y - 1, m: 11 }; render(); }
     else if (act === "nextm") { calMonth = calMonth.m < 11 ? { y: calMonth.y, m: calMonth.m + 1 } : { y: calMonth.y + 1, m: 0 }; render(); }

@@ -45,6 +45,40 @@
     return mid >= 1 && Math.abs(mid - h.every) >= 1 && h.dismissed !== mid ? mid : null;
   }
 
+  // ---- notes ----
+  // h.notes maps a day to { t: text, c: carry }. A note with `c` goes on to every later day until a newer
+  // entry replaces it, so a carried note is stored once, not copied into each day. An entry with empty text
+  // is a "stop" marker: it ends a carried note without showing anything itself.
+  const NOTE_MAX = 200, NOTES_KEEP = 80;
+  const noteDays = (h) => Object.keys(h.notes || {}).sort();
+
+  // The note shown for a day: its own entry, else the carried note from the nearest earlier entry.
+  // { t, c, own, from } or null.
+  function noteFor(h, day) {
+    const notes = h.notes || {};
+    if (notes[day]) return notes[day].t ? { t: notes[day].t, c: !!notes[day].c, own: true, from: day } : null;
+    let prev = null;
+    for (const k of noteDays(h)) if (k < day) prev = k;
+    const n = prev && notes[prev];
+    return n && n.c && n.t ? { t: n.t, c: true, own: false, from: prev } : null;
+  }
+
+  // Saves (or clears) the note of one day. Returns the habit's notes object.
+  function setNote(h, day, text, carry) {
+    const t = String(text || "").trim().slice(0, NOTE_MAX);
+    const notes = (h.notes = h.notes || {});
+    if (t) notes[day] = { t, c: !!carry };
+    else {
+      // Clearing a day that inherits a carried note needs a marker, or the older note would show again.
+      delete notes[day];
+      if (noteFor(h, day)) notes[day] = { t: "", c: false };
+    }
+    const keys = noteDays(h);
+    for (const k of keys.slice(0, Math.max(0, keys.length - NOTES_KEEP))) delete notes[k];
+    if (!Object.keys(notes).length) delete h.notes;
+    return h.notes || {};
+  }
+
   function addLog(h, date) {
     if (!h.logs.includes(date)) { h.logs.push(date); h.logs.sort(); }
   }
@@ -135,6 +169,6 @@
     return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
   }
 
-  const api = { reminders, byDay, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays, jobsOn };
+  const api = { noteFor, setNote, NOTE_MAX, reminders, byDay, at, DAY, num, str, todayStr, status, onTime, suggest, addLog, shouldAsk, upcoming, nearestDays, jobsOn };
   if (typeof module !== "undefined") module.exports = api; else root.Schedule = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

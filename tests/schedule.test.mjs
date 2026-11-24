@@ -157,3 +157,37 @@ test("relaxed habit: never late or red, says how long ago it was done, due every
   assert.equal(r.length, 31);
   assert.equal(S.jobsOn([h], TODAY, TODAY).length, 1);
 });
+
+test("notes: own note, carried note, stop marker, clearing, keep limit", () => {
+  const h = habit("Kitap", 1, 0, "2026-11-01", { notes: undefined });
+  S.setNote(h, "2026-11-03", "3. kitaptayım", true);
+  assert.deepEqual(S.noteFor(h, "2026-11-03"), { t: "3. kitaptayım", c: true, own: true, from: "2026-11-03" });
+  assert.equal(S.noteFor(h, "2026-11-02"), null, "never shown before the day it was written");
+  const later = S.noteFor(h, "2026-11-07");
+  assert.equal(later.t, "3. kitaptayım");
+  assert.equal(later.own, false);
+  assert.equal(later.from, "2026-11-03", "a carried note goes on to every later day");
+  S.setNote(h, "2026-11-05", "4. kitaba geçtim", true);
+  assert.equal(S.noteFor(h, "2026-11-04").t, "3. kitaptayım", "the days between keep the old note");
+  assert.equal(S.noteFor(h, "2026-11-07").t, "4. kitaba geçtim", "a newer entry replaces it");
+  S.setNote(h, "2026-11-08", "bitti", false);
+  assert.equal(S.noteFor(h, "2026-11-09"), null, "a note that is not carried stops the chain");
+  // clearing a day that only inherits needs a stop marker
+  S.setNote(h, "2026-11-06", "", false);
+  assert.equal(h.notes["2026-11-06"].t, "");
+  assert.equal(S.noteFor(h, "2026-11-06"), null);
+  assert.equal(S.noteFor(h, "2026-11-07"), null, "clearing ends the carried note from that day on");
+  assert.equal(S.noteFor(h, "2026-11-05").t, "4. kitaba geçtim", "earlier days keep it");
+  // clearing an own note with nothing to inherit removes the entry; no notes left removes the object
+  const h2 = habit("Su", 1, 0, "2026-11-01");
+  S.setNote(h2, "2026-11-02", "  x  ", false);
+  assert.equal(h2.notes["2026-11-02"].t, "x", "text is trimmed");
+  S.setNote(h2, "2026-11-02", "", false);
+  assert.equal(h2.notes, undefined);
+  S.setNote(h2, "2026-11-02", "y".repeat(500), false);
+  assert.equal(h2.notes["2026-11-02"].t.length, S.NOTE_MAX);
+  const h3 = habit("Çok", 1, 0, "2026-01-01");
+  for (let i = 0; i < 100; i++) S.setNote(h3, S.str(S.num("2026-01-01") + i), "n" + i, false);
+  assert.equal(Object.keys(h3.notes).length, 80);
+  assert.ok(h3.notes[S.str(S.num("2026-01-01") + 99)], "the newest are kept");
+});
