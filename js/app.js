@@ -237,14 +237,14 @@
   }
 
   // ---- editor ----
-  // The "warn when I miss it" box follows the repeat (off for daily) until the person has touched it themselves.
-  let strictTouched = false;
+  // The "relaxed" box follows the repeat (ticked for daily) until the person has touched it themselves.
+  let softTouched = false;
   function updateHint() {
     const n = Math.max(1, parseInt($("#f-every").value) || 1), g = Math.max(0, parseInt($("#f-grace").value) || 0);
-    if (!strictTouched) $("#f-strict").checked = n !== 1;
-    const strict = $("#f-strict").checked;
-    $("#f-grace").disabled = !strict;
-    $("#f-hint").textContent = !strict ? t("hintSoft", { n }) : g ? t("hint", { n, g }) : t("hint0", { n });
+    if (!softTouched) $("#f-soft").checked = n === 1;
+    const soft = $("#f-soft").checked;
+    $("#f-grace").disabled = soft;
+    $("#f-hint").textContent = soft ? t("hintSoft", { n }) : g ? t("hint", { n, g }) : t("hint0", { n });
     document.querySelectorAll("#f-presets [data-preset]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.preset === n)));
   }
   function openForm(id) {
@@ -254,7 +254,7 @@
     $("#f-name").value = h ? h.name : "";
     $("#f-every").value = h ? h.every : 3; $("#f-grace").value = h ? h.grace : 1;
     $("#f-time").value = h ? h.time || "" : defTime();
-    strictTouched = !!h; $("#f-strict").checked = h ? !h.soft : true;
+    softTouched = !!h; $("#f-soft").checked = h ? !!h.soft : false;
     $("#f-last").value = ""; $("#f-last").max = today();
     $("#f-last-wrap").hidden = !!h; $("#f-history-wrap").hidden = !h;
     const hist = $("#f-history"); hist.replaceChildren();
@@ -271,7 +271,7 @@
     $("#form-dialog").showModal();
   }
   $("#f-every").oninput = $("#f-grace").oninput = updateHint;
-  $("#f-strict").onchange = () => { strictTouched = true; updateHint(); };
+  $("#f-soft").onchange = () => { softTouched = true; updateHint(); };
   // The repeat buttons only fill in the interval; the number field stays the single source of truth.
   $("#f-presets").onclick = (e) => {
     const b = e.target.closest("[data-preset]");
@@ -281,7 +281,7 @@
   };
   $("#form").onsubmit = () => {
     const name = $("#f-name").value.trim(); if (!name) return;
-    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: $("#f-strict").checked ? Math.max(0, parseInt($("#f-grace").value) || 0) : 0, time: $("#f-time").value || null, soft: !$("#f-strict").checked };
+    const data = { name, every: Math.max(1, parseInt($("#f-every").value) || 1), grace: $("#f-soft").checked ? 0 : Math.max(0, parseInt($("#f-grace").value) || 0), time: $("#f-time").value || null, soft: $("#f-soft").checked };
     const h = find(editingId);
     if (h) { if (data.every !== h.every) h.dismissed = null; Object.assign(h, data); }
     else {
