@@ -105,7 +105,9 @@
   function ring(st, h) {
     const C = 2 * Math.PI * 20, len = Math.max(0.04, st.frac) * C;
     if (dueToday(st)) {
-      return `<svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="tr" cx="24" cy="24" r="20"/><circle class="pr" cx="24" cy="24" r="20" stroke-dasharray="${C} ${C}"/><text class="emo-t" x="24" y="25">${esc((h && h.emoji) || "🙂")}</text></svg>`;
+      // The emoji is HTML laid over the ring and centred with flexbox: SVG text puts emoji at different heights
+      // on different phones (baseline rules), a flex box does not.
+      return `<span class="ring emo-ring" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="tr" cx="24" cy="24" r="20"/><circle class="pr" cx="24" cy="24" r="20" stroke-dasharray="${C} ${C}"/></svg><span class="emo-o">${esc((h && h.emoji) || "🙂")}</span></span>`;
     }
     const label = st.state === "ok" ? st.toIdeal : st.state === "late" ? "+" + -st.toDeadline : "!";
     return `<svg class="ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="tr" cx="24" cy="24" r="20"/><circle class="pr" cx="24" cy="24" r="20" stroke-dasharray="${len} ${C}"/><text x="24" y="25">${label}</text></svg>`;
